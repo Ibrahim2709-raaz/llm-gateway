@@ -9,6 +9,7 @@ __pycache__/
 .pytest_cache/
 .ruff_cache/
 .mypy_cache/
+.coverage
 .venv/
 venv/
 dist/
@@ -30,4 +31,3 @@ htmlcov/
 # ChatGPT project metadata and synced reference material
 AGENTS.md
 sources/
-
