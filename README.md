@@ -25,11 +25,17 @@ availability, and task complexity.
 
 ## Development status
 
-The project is currently in the planning and initial scaffolding stage.
+Step 1, MVP planning and architecture, is complete. The next milestone is the
+FastAPI project foundation.
 
 The first milestone will provide a runnable FastAPI service, health checks,
 PostgreSQL and Redis connectivity, and an OpenAI-compatible mock completion
 endpoint.
+
+## Project documentation
+
+- [MVP scope and acceptance criteria](docs/mvp-scope.md)
+- [MVP architecture](docs/architecture.md)
 
 ## Development stages
 
@@ -45,4 +51,3 @@ endpoint.
 10. Observability dashboards
 11. Security and reliability hardening
 12. Deployment and documentation
-
