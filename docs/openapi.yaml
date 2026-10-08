@@ -1,0 +1,457 @@
+openapi: 3.1.0
+info:
+  title: LLM Gateway API
+  version: 0.1.0
+  description: Multi-provider LLM chat gateway MVP contract.
+servers:
+  - url: http://localhost:8000
+    description: Local development
+tags:
+  - name: Chat
+  - name: Usage
+  - name: Health
+paths:
+  /v1/chat/completions:
+    post:
+      tags: [Chat]
+      operationId: createChatCompletion
+      summary: Create a routed chat completion
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/RequestId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ChatCompletionRequest"
+      responses:
+        "200":
+          description: Completion created or returned from cache.
+          headers:
+            X-Request-ID:
+              $ref: "#/components/headers/RequestId"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ChatCompletionResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "402":
+          $ref: "#/components/responses/BudgetExceeded"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+        "502":
+          $ref: "#/components/responses/ProviderError"
+        "503":
+          $ref: "#/components/responses/Unavailable"
+        "504":
+          $ref: "#/components/responses/ProviderTimeout"
+  /v1/usage:
+    get:
+      tags: [Usage]
+      operationId: getUsageSummary
+      summary: Get authenticated customer usage for a calendar month
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/RequestId"
+        - name: period
+          in: query
+          required: true
+          description: Calendar month in YYYY-MM format.
+          schema:
+            type: string
+            pattern: "^[0-9]{4}-(0[1-9]|1[0-2])$"
+            example: 2026-10
+      responses:
+        "200":
+          description: Usage summary.
+          headers:
+            X-Request-ID:
+              $ref: "#/components/headers/RequestId"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UsageSummary"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+  /health/live:
+    get:
+      tags: [Health]
+      operationId: getLiveness
+      summary: Check whether the gateway process is alive
+      security: []
+      responses:
+        "200":
+          description: Process is alive.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthResponse"
+  /health/ready:
+    get:
+      tags: [Health]
+      operationId: getReadiness
+      summary: Check required gateway dependencies
+      security: []
+      responses:
+        "200":
+          description: Gateway is ready.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReadinessResponse"
+        "503":
+          description: A required dependency is unavailable.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReadinessResponse"
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: Gateway API key
+  parameters:
+    RequestId:
+      name: X-Request-ID
+      in: header
+      required: false
+      description: Optional caller-provided UUID used for tracing.
+      schema:
+        type: string
+        format: uuid
+  headers:
+    RequestId:
+      description: Gateway request UUID.
+      schema:
+        type: string
+        format: uuid
+  schemas:
+    ChatMessage:
+      type: object
+      additionalProperties: false
+      required: [role, content]
+      properties:
+        role:
+          type: string
+          enum: [system, user, assistant, tool]
+        content:
+          type: string
+          minLength: 1
+    RoutingOptions:
+      type: object
+      additionalProperties: false
+      properties:
+        strategy:
+          type: string
+          enum: [balanced, cost, latency, quality]
+          default: balanced
+        allowed_providers:
+          type: array
+          minItems: 1
+          uniqueItems: true
+          items:
+            type: string
+        max_cost_usd:
+          type: number
+          format: double
+          minimum: 0
+        disable_cache:
+          type: boolean
+          default: false
+    ChatCompletionRequest:
+      type: object
+      additionalProperties: false
+      required: [messages]
+      properties:
+        model:
+          type: string
+          minLength: 1
+          default: auto
+        messages:
+          type: array
+          minItems: 1
+          items:
+            $ref: "#/components/schemas/ChatMessage"
+        temperature:
+          type: number
+          format: double
+          minimum: 0
+          maximum: 2
+          default: 0.7
+        max_tokens:
+          type: integer
+          minimum: 1
+          maximum: 32768
+          default: 512
+        stream:
+          type: boolean
+          enum: [false]
+          default: false
+        routing:
+          $ref: "#/components/schemas/RoutingOptions"
+    ResponseMessage:
+      type: object
+      additionalProperties: false
+      required: [role, content]
+      properties:
+        role:
+          type: string
+          const: assistant
+        content:
+          type: string
+    Choice:
+      type: object
+      additionalProperties: false
+      required: [index, message, finish_reason]
+      properties:
+        index:
+          type: integer
+          minimum: 0
+        message:
+          $ref: "#/components/schemas/ResponseMessage"
+        finish_reason:
+          type: string
+          enum: [stop, length, content_filter]
+    TokenUsage:
+      type: object
+      additionalProperties: false
+      required: [prompt_tokens, completion_tokens, total_tokens]
+      properties:
+        prompt_tokens:
+          type: integer
+          minimum: 0
+        completion_tokens:
+          type: integer
+          minimum: 0
+        total_tokens:
+          type: integer
+          minimum: 0
+    RoutingAttempt:
+      type: object
+      additionalProperties: false
+      required: [provider, model, outcome]
+      properties:
+        provider:
+          type: string
+        model:
+          type: string
+        outcome:
+          type: string
+          enum: [success, timeout, rate_limited, unavailable, error]
+    GatewayMetadata:
+      type: object
+      additionalProperties: false
+      required:
+        - request_id
+        - provider
+        - cost_usd
+        - cached
+        - routing_strategy
+        - attempts
+      properties:
+        request_id:
+          type: string
+          format: uuid
+        provider:
+          type: string
+        cost_usd:
+          type: number
+          format: double
+          minimum: 0
+        cached:
+          type: boolean
+        routing_strategy:
+          type: string
+          enum: [explicit, balanced, cost, latency, quality]
+        attempts:
+          type: array
+          items:
+            $ref: "#/components/schemas/RoutingAttempt"
+    ChatCompletionResponse:
+      type: object
+      additionalProperties: false
+      required: [id, object, created, model, choices, usage, gateway]
+      properties:
+        id:
+          type: string
+        object:
+          type: string
+          const: chat.completion
+        created:
+          type: integer
+          description: Unix timestamp in seconds.
+        model:
+          type: string
+        choices:
+          type: array
+          minItems: 1
+          items:
+            $ref: "#/components/schemas/Choice"
+        usage:
+          $ref: "#/components/schemas/TokenUsage"
+        gateway:
+          $ref: "#/components/schemas/GatewayMetadata"
+    UsageSummary:
+      type: object
+      additionalProperties: false
+      required:
+        - period
+        - request_count
+        - prompt_tokens
+        - completion_tokens
+        - total_tokens
+        - cost_usd
+        - budget_usd
+        - remaining_budget_usd
+      properties:
+        period:
+          type: string
+          example: 2026-10
+        request_count:
+          type: integer
+          minimum: 0
+        prompt_tokens:
+          type: integer
+          minimum: 0
+        completion_tokens:
+          type: integer
+          minimum: 0
+        total_tokens:
+          type: integer
+          minimum: 0
+        cost_usd:
+          type: number
+          minimum: 0
+        budget_usd:
+          type: number
+          minimum: 0
+        remaining_budget_usd:
+          type: number
+          minimum: 0
+    HealthResponse:
+      type: object
+      additionalProperties: false
+      required: [status]
+      properties:
+        status:
+          type: string
+          const: ok
+    ReadinessResponse:
+      type: object
+      additionalProperties: false
+      required: [status, checks]
+      properties:
+        status:
+          type: string
+          enum: [ready, not_ready]
+        checks:
+          type: object
+          additionalProperties:
+            type: string
+            enum: [ok, unavailable]
+    ErrorDetail:
+      type: object
+      additionalProperties: false
+      required: [message, type, code, request_id]
+      properties:
+        message:
+          type: string
+        type:
+          type: string
+        param:
+          type: [string, "null"]
+        code:
+          type: string
+        request_id:
+          type: string
+          format: uuid
+    ErrorResponse:
+      type: object
+      additionalProperties: false
+      required: [error]
+      properties:
+        error:
+          $ref: "#/components/schemas/ErrorDetail"
+  responses:
+    BadRequest:
+      description: Request violates a gateway rule.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    Unauthorized:
+      description: API key is missing, invalid, or revoked.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    BudgetExceeded:
+      description: Customer budget would be exceeded.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    Forbidden:
+      description: Model or provider is not permitted.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    NotFound:
+      description: Requested model was not found.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    ValidationError:
+      description: Request validation failed.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    RateLimited:
+      description: Request rate limit was exceeded.
+      headers:
+        Retry-After:
+          description: Seconds until a request is likely to be accepted.
+          schema:
+            type: integer
+            minimum: 1
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    ProviderError:
+      description: Provider attempts failed.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    Unavailable:
+      description: No eligible healthy provider is available.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    ProviderTimeout:
+      description: All eligible provider attempts timed out.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+

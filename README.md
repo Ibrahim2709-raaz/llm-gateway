@@ -25,8 +25,8 @@ availability, and task complexity.
 
 ## Development status
 
-Step 1, MVP planning and architecture, is complete. The next milestone is the
-FastAPI project foundation.
+Steps 1 and 2, MVP planning and API contract design, are complete. The next
+milestone is the FastAPI project foundation.
 
 The first milestone will provide a runnable FastAPI service, health checks,
 PostgreSQL and Redis connectivity, and an OpenAI-compatible mock completion
@@ -36,6 +36,8 @@ endpoint.
 
 - [MVP scope and acceptance criteria](docs/mvp-scope.md)
 - [MVP architecture](docs/architecture.md)
+- [API contract and examples](docs/api-contract.md)
+- [OpenAPI 3.1 specification](docs/openapi.yaml)
 
 ## Development stages
 
