@@ -25,12 +25,13 @@ availability, and task complexity.
 
 ## Development status
 
-Steps 1 through 3 are complete: MVP planning, API contract design, and the
-FastAPI project foundation. The next milestone adds PostgreSQL and Redis.
+Steps 1 through 4 are complete: MVP planning, API contract design, the FastAPI
+foundation, and PostgreSQL/Redis infrastructure. The gateway now has initial
+models and migrations for clients, API keys, providers, budgets, and usage,
+plus dependency-aware readiness checks.
 
-The first milestone will provide a runnable FastAPI service, health checks,
-PostgreSQL and Redis connectivity, and an OpenAI-compatible mock completion
-endpoint.
+The next milestone implements the unified OpenAI-compatible chat-completions
+API and a deterministic mock provider.
 
 ## Project documentation
 
@@ -69,6 +70,19 @@ Alternatively, copy `.env.example` to `.env` and run:
 ```bash
 docker compose up --build
 ```
+
+The Compose stack starts the gateway, PostgreSQL, and Redis. The gateway waits
+for both dependencies to become healthy, applies Alembic migrations, and then
+starts FastAPI. To run PostgreSQL and Redis only while developing locally:
+
+```bash
+docker compose up -d postgres redis
+alembic upgrade head
+uvicorn app.main:app --reload
+```
+
+Readiness returns HTTP `200` only when both PostgreSQL and Redis respond; it
+returns HTTP `503` with per-dependency status otherwise.
 
 ## Development stages
 

@@ -9,15 +9,19 @@ description = "Multi-provider LLM gateway with routing, limits, cost tracking, a
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
+  "alembic>=1.14,<2",
+  "asyncpg>=0.30,<1",
   "fastapi>=0.115,<1",
   "pydantic-settings>=2.6,<3",
+  "redis>=5.2,<6",
+  "sqlalchemy[asyncio]>=2.0.36,<3",
   "structlog>=24.4,<26",
   "uvicorn[standard]>=0.32,<1",
 ]
 
 [project.optional-dependencies]
 dev = [
-  "httpx2>=2,<3",
+  "httpx>=0.28,<1",
   "mypy>=1.13,<2",
   "pytest>=8.3,<9",
   "pytest-cov>=6,<7",

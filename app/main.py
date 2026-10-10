@@ -8,16 +8,23 @@ from app.api.router import api_router
 from app.core.config import get_settings
 from app.core.errors import register_exception_handlers
 from app.core.logging import configure_logging
+from app.core.resources import create_resources
 from app.middleware.request_id import RequestIdMiddleware
 
 
 @asynccontextmanager
-async def lifespan(_: FastAPI) -> AsyncIterator[None]:
+async def lifespan(application: FastAPI) -> AsyncIterator[None]:
     settings = get_settings()
     logger = structlog.get_logger(__name__)
+    resources = create_resources(settings)
+    application.state.resources = resources
     logger.info("gateway_started", environment=settings.app_env)
-    yield
-    logger.info("gateway_stopped")
+    try:
+        yield
+    finally:
+        await resources.redis.aclose()
+        await resources.database_engine.dispose()
+        logger.info("gateway_stopped")
 
 
 def create_app() -> FastAPI:
@@ -40,4 +47,3 @@ def create_app() -> FastAPI:
 
 
 app = create_app()
-
