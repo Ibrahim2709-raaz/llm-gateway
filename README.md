@@ -25,13 +25,13 @@ availability, and task complexity.
 
 ## Development status
 
-Steps 1 through 4 are complete: MVP planning, API contract design, the FastAPI
-foundation, and PostgreSQL/Redis infrastructure. The gateway now has initial
-models and migrations for clients, API keys, providers, budgets, and usage,
-plus dependency-aware readiness checks.
+Steps 1 through 5 are complete: MVP planning, API contract design, the FastAPI
+foundation, PostgreSQL/Redis infrastructure, and the unified chat-completions
+API. The gateway now has initial persistence models, dependency-aware readiness
+checks, strict OpenAI-compatible schemas, and a deterministic mock provider.
 
-The next milestone implements the unified OpenAI-compatible chat-completions
-API and a deterministic mock provider.
+The next milestone integrates the first real LLM provider behind the provider
+interface.
 
 ## Project documentation
 
@@ -56,6 +56,18 @@ Open:
 - API documentation: <http://localhost:8000/docs>
 - Liveness: <http://localhost:8000/health/live>
 - Readiness: <http://localhost:8000/health/ready>
+
+Try the mock completion endpoint:
+
+```bash
+curl http://localhost:8000/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -d '{"messages":[{"role":"user","content":"Explain an LLM gateway."}]}'
+```
+
+The mock provider is deterministic, costs `$0`, and requires no external API
+key. It exists to validate the gateway contract before real provider adapters
+are added.
 
 Run quality checks:
 

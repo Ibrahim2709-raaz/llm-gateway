@@ -358,7 +358,7 @@ components:
       properties:
         status:
           type: string
-          enum: [ready, not_ready]
+          enum: [ready, unavailable]
         checks:
           type: object
           additionalProperties:
