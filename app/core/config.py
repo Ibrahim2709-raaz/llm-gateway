@@ -1,7 +1,7 @@
 from functools import lru_cache
 from typing import Literal
 
-from pydantic import Field
+from pydantic import Field, SecretStr, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -24,6 +24,21 @@ class Settings(BaseSettings):
     database_max_overflow: int = Field(default=10, ge=0, le=100)
     redis_url: str = "redis://localhost:6379/0"
     dependency_check_timeout_seconds: float = Field(default=1.0, gt=0, le=10)
+    openai_enabled: bool = False
+    openai_api_key: SecretStr | None = None
+    openai_model: str = Field(default="gpt-5.6-terra", min_length=1)
+    openai_timeout_seconds: float = Field(default=30.0, gt=0, le=600)
+    openai_input_cost_per_million_usd: float = Field(default=2.0, ge=0)
+    openai_output_cost_per_million_usd: float = Field(default=12.0, ge=0)
+
+    @model_validator(mode="after")
+    def enabled_openai_requires_key(self) -> "Settings":
+        missing_key = (
+            self.openai_api_key is None or not self.openai_api_key.get_secret_value().strip()
+        )
+        if self.openai_enabled and missing_key:
+            raise ValueError("OPENAI_API_KEY is required when OPENAI_ENABLED is true")
+        return self
 
 
 @lru_cache

@@ -85,6 +85,10 @@ reproducible after a provider changes its pricing.
 - API keys and provider credentials are never written to logs.
 - Provider prices are configuration data, not routing constants in source code.
 - The mock provider is a first-class adapter used by local development and tests.
+- Real providers are opt-in; the gateway never enables a paid provider without
+  both an explicit enable flag and a credential.
+- Provider SDK retries are disabled so retry and fallback behavior remains
+  observable and controlled by the gateway execution layer.
 
 ## Technology choices
 

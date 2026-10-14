@@ -25,13 +25,12 @@ availability, and task complexity.
 
 ## Development status
 
-Steps 1 through 5 are complete: MVP planning, API contract design, the FastAPI
-foundation, PostgreSQL/Redis infrastructure, and the unified chat-completions
-API. The gateway now has initial persistence models, dependency-aware readiness
-checks, strict OpenAI-compatible schemas, and a deterministic mock provider.
+Steps 1 through 6 are complete: MVP planning, API contract design, the FastAPI
+foundation, PostgreSQL/Redis infrastructure, the unified chat-completions API,
+and the first real provider integration. The gateway now supports OpenAI's
+Responses API alongside its deterministic mock provider.
 
-The next milestone integrates the first real LLM provider behind the provider
-interface.
+The next milestone adds gateway API-key authentication and customer identity.
 
 ## Project documentation
 
@@ -68,6 +67,28 @@ curl http://localhost:8000/v1/chat/completions \
 The mock provider is deterministic, costs `$0`, and requires no external API
 key. It exists to validate the gateway contract before real provider adapters
 are added.
+
+### Enable OpenAI
+
+OpenAI is opt-in so a local checkout never makes a paid request accidentally.
+Set these values in `.env`:
+
+```dotenv
+OPENAI_ENABLED=true
+OPENAI_API_KEY=your-project-api-key
+OPENAI_MODEL=gpt-5.6-terra
+```
+
+When enabled, `model: "auto"` selects OpenAI before the mock provider. Use
+`model: "mock-1"` or `routing.allowed_providers: ["mock"]` to force the free
+mock. Provider timeouts and retries are controlled by the gateway; SDK retries
+are disabled. Requests use the Responses API with storage disabled. Current
+model and pricing defaults follow the
+[official OpenAI model documentation](https://developers.openai.com/api/docs/models/gpt-5.6-terra)
+and remain configurable through environment variables.
+
+Until structured tool calling is implemented, incoming `tool` messages are
+sent to OpenAI as clearly labelled user text.
 
 Run quality checks:
 
