@@ -15,6 +15,19 @@ class ProviderResult:
     cost_usd: Decimal = Decimal("0")
 
 
+TaskComplexity = Literal["simple", "medium", "complex"]
+
+
+@dataclass(frozen=True, slots=True)
+class ModelRoutingProfile:
+    input_cost_per_million_usd: Decimal
+    output_cost_per_million_usd: Decimal
+    estimated_latency_ms: int
+    quality_score: float
+    max_complexity: TaskComplexity = "complex"
+    auto_selectable: bool = True
+
+
 class ProviderError(Exception):
     """Base class for sanitized provider failures."""
 
@@ -38,5 +51,6 @@ class ProviderUnavailableError(ProviderError):
 class ChatProvider(Protocol):
     name: str
     model: str
+    routing_profile: ModelRoutingProfile
 
     async def complete(self, request: ChatCompletionRequest) -> ProviderResult: ...

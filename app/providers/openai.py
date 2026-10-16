@@ -5,6 +5,7 @@ import openai
 from openai import AsyncOpenAI
 
 from app.providers.base import (
+    ModelRoutingProfile,
     ProviderRateLimitError,
     ProviderRequestError,
     ProviderResult,
@@ -24,11 +25,19 @@ class OpenAIProvider:
         model: str,
         input_cost_per_million_usd: float,
         output_cost_per_million_usd: float,
+        estimated_latency_ms: int = 1500,
+        quality_score: float = 0.9,
     ) -> None:
         self.client = client
         self.model = model
         self.input_cost_per_million_usd = Decimal(str(input_cost_per_million_usd))
         self.output_cost_per_million_usd = Decimal(str(output_cost_per_million_usd))
+        self.routing_profile = ModelRoutingProfile(
+            input_cost_per_million_usd=self.input_cost_per_million_usd,
+            output_cost_per_million_usd=self.output_cost_per_million_usd,
+            estimated_latency_ms=estimated_latency_ms,
+            quality_score=quality_score,
+        )
 
     async def complete(self, request: ChatCompletionRequest) -> ProviderResult:
         if request.max_tokens < 16:

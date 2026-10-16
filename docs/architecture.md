@@ -91,6 +91,9 @@ reproducible after a provider changes its pricing.
   observable and controlled by the gateway execution layer.
 - Request limits use one atomic Redis script and customer-scoped keys. The
   gateway fails closed when Redis cannot make a safe limit decision.
+- Automatic routing uses rule-based task classification and immutable model
+  profiles for price, typical latency, quality, and maximum task complexity.
+  Per-request allowlists and cost ceilings are applied before scoring.
 
 ## Technology choices
 

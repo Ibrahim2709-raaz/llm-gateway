@@ -283,6 +283,8 @@ components:
         - cost_usd
         - cached
         - routing_strategy
+        - task_complexity
+        - estimated_cost_usd
         - attempts
       properties:
         request_id:
@@ -299,6 +301,13 @@ components:
         routing_strategy:
           type: string
           enum: [explicit, balanced, cost, latency, quality]
+        task_complexity:
+          type: string
+          enum: [simple, medium, complex]
+        estimated_cost_usd:
+          type: number
+          format: double
+          minimum: 0
         attempts:
           type: array
           items:

@@ -77,6 +77,8 @@ class GatewayMetadata(BaseModel):
     cost_usd: float = Field(ge=0)
     cached: bool
     routing_strategy: Literal["explicit", "balanced", "cost", "latency", "quality"]
+    task_complexity: Literal["simple", "medium", "complex"]
+    estimated_cost_usd: float = Field(ge=0)
     attempts: list[RoutingAttempt]
 
 

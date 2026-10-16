@@ -45,6 +45,8 @@ def test_create_chat_completion_with_mock_provider(client: TestClient) -> None:
         "cost_usd": 0.0,
         "cached": False,
         "routing_strategy": "cost",
+        "task_complexity": "simple",
+        "estimated_cost_usd": 0.0,
         "attempts": [{"provider": "mock", "model": "mock-1", "outcome": "success"}],
     }
     assert response.headers["x-request-id"] == request_id

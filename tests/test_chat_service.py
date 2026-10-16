@@ -5,6 +5,7 @@ import pytest
 
 from app.core.errors import GatewayError
 from app.providers.base import (
+    ModelRoutingProfile,
     ProviderRateLimitError,
     ProviderRequestError,
     ProviderResult,
@@ -18,6 +19,12 @@ from app.services.chat import ChatCompletionService
 class SuccessfulProvider:
     name = "successful"
     model = "successful-1"
+    routing_profile = ModelRoutingProfile(
+        input_cost_per_million_usd=Decimal("1"),
+        output_cost_per_million_usd=Decimal("2"),
+        estimated_latency_ms=100,
+        quality_score=0.8,
+    )
 
     async def complete(self, request: ChatCompletionRequest) -> ProviderResult:
         return ProviderResult(
@@ -33,6 +40,12 @@ class SuccessfulProvider:
 class FailingProvider:
     name = "failing"
     model = "failing-1"
+    routing_profile = ModelRoutingProfile(
+        input_cost_per_million_usd=Decimal("1"),
+        output_cost_per_million_usd=Decimal("2"),
+        estimated_latency_ms=100,
+        quality_score=0.8,
+    )
 
     def __init__(self, error: Exception) -> None:
         self.error = error
@@ -62,6 +75,8 @@ async def test_service_selects_explicit_model_and_reports_cost() -> None:
     assert result.gateway.provider == provider.name
     assert result.gateway.cost_usd == 0.25
     assert result.gateway.routing_strategy == "explicit"
+    assert result.gateway.task_complexity == "simple"
+    assert result.gateway.estimated_cost_usd > 0
 
 
 @pytest.mark.anyio

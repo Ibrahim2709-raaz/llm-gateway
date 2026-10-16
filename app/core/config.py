@@ -35,6 +35,8 @@ class Settings(BaseSettings):
     openai_timeout_seconds: float = Field(default=30.0, gt=0, le=600)
     openai_input_cost_per_million_usd: float = Field(default=2.0, ge=0)
     openai_output_cost_per_million_usd: float = Field(default=12.0, ge=0)
+    openai_estimated_latency_ms: int = Field(default=1500, ge=1)
+    openai_quality_score: float = Field(default=0.9, ge=0, le=1)
 
     @model_validator(mode="after")
     def enabled_openai_requires_key(self) -> "Settings":

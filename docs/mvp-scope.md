@@ -133,7 +133,7 @@ The MVP is complete when all of the following are demonstrated:
 - [ ] A valid API key can make a chat-completion request.
 - [ ] An invalid or revoked API key receives `401 Unauthorized`.
 - [ ] Two customers have independent rate limits, caches, and budgets.
-- [ ] `model: auto` selects a model and exposes the routing attempts in gateway
+- [x] `model: auto` selects a model and exposes the routing attempts in gateway
       metadata.
 - [ ] A simulated temporary provider failure triggers retry and fallback.
 - [ ] A permanent provider error is not retried.

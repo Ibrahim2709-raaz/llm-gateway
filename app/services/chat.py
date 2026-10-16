@@ -1,6 +1,7 @@
 from datetime import UTC, datetime
 from uuid import UUID, uuid4
 
+import structlog
 from fastapi import status
 
 from app.core.errors import GatewayError
@@ -11,6 +12,7 @@ from app.providers.base import (
     ProviderTimeoutError,
     ProviderUnavailableError,
 )
+from app.routing.service import ProviderRouter
 from app.schemas.chat import (
     ChatCompletionRequest,
     ChatCompletionResponse,
@@ -21,15 +23,28 @@ from app.schemas.chat import (
     TokenUsage,
 )
 
+logger = structlog.get_logger(__name__)
+
 
 class ChatCompletionService:
     def __init__(self, providers: tuple[ChatProvider, ...]) -> None:
         self.providers = providers
+        self.router = ProviderRouter(providers)
 
     async def create(
         self, request: ChatCompletionRequest, request_id: UUID
     ) -> ChatCompletionResponse:
-        provider = self._select_provider(request)
+        routing_decision = self.router.route(request)
+        provider = routing_decision.provider
+        logger.info(
+            "provider_route_selected",
+            request_id=str(request_id),
+            provider=provider.name,
+            model=provider.model,
+            strategy="explicit" if request.model != "auto" else request.routing.strategy,
+            task_complexity=routing_decision.task_complexity,
+            estimated_cost_usd=str(routing_decision.estimated_cost_usd),
+        )
         try:
             result = await provider.complete(request)
         except ProviderRequestError as exc:
@@ -79,6 +94,8 @@ class ChatCompletionService:
                 cost_usd=float(result.cost_usd),
                 cached=False,
                 routing_strategy=routing_strategy,
+                task_complexity=routing_decision.task_complexity,
+                estimated_cost_usd=float(routing_decision.estimated_cost_usd),
                 attempts=[
                     RoutingAttempt(
                         provider=provider.name,
@@ -87,34 +104,4 @@ class ChatCompletionService:
                     )
                 ],
             ),
-        )
-
-    def _select_provider(self, request: ChatCompletionRequest) -> ChatProvider:
-        allowed_providers = request.routing.allowed_providers
-        eligible = [
-            provider
-            for provider in self.providers
-            if allowed_providers is None or provider.name in allowed_providers
-        ]
-        if request.model != "auto":
-            eligible = [provider for provider in eligible if provider.model == request.model]
-        if eligible:
-            return eligible[0]
-
-        known_model = any(provider.model == request.model for provider in self.providers)
-        if request.model != "auto" and not known_model:
-            raise GatewayError(
-                f"Model '{request.model}' was not found.",
-                code="model_not_found",
-                error_type="invalid_request_error",
-                status_code=status.HTTP_404_NOT_FOUND,
-                param="model",
-            )
-
-        raise GatewayError(
-            "No provider satisfies the request policy.",
-            code="no_provider_available",
-            error_type="service_unavailable_error",
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            param="routing.allowed_providers",
         )

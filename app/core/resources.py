@@ -45,6 +45,8 @@ def create_resources(settings: Settings) -> AppResources:
                 model=settings.openai_model,
                 input_cost_per_million_usd=settings.openai_input_cost_per_million_usd,
                 output_cost_per_million_usd=settings.openai_output_cost_per_million_usd,
+                estimated_latency_ms=settings.openai_estimated_latency_ms,
+                quality_score=settings.openai_quality_score,
             )
         )
     providers.append(MockProvider())

@@ -124,6 +124,13 @@ Authorization: Bearer gw_live_example
   cost exceeds it.
 - `disable_cache` bypasses both cache reads and writes.
 
+For `model: "auto"`, the gateway classifies the task as `simple`, `medium`, or
+`complex`. It removes candidates that violate provider allowlists, task
+capability, or the maximum estimated request cost. The selected strategy then
+optimizes estimated price (`cost`), typical response time (`latency`), model
+capability (`quality`), or a complexity-aware weighted score (`balanced`). An
+explicit model bypasses ranking but still respects allowlists and cost limits.
+
 ### Example response
 
 ```json
@@ -153,6 +160,8 @@ Authorization: Bearer gw_live_example
     "cost_usd": 0.000081,
     "cached": false,
     "routing_strategy": "balanced",
+    "task_complexity": "medium",
+    "estimated_cost_usd": 0.004862,
     "attempts": [
       {
         "provider": "openai",
@@ -164,8 +173,10 @@ Authorization: Bearer gw_live_example
 }
 ```
 
-Only sanitized attempt information is returned. Internal exception messages and
-provider credentials are never exposed to clients.
+`estimated_cost_usd` is the pre-request upper-bound estimate based on estimated
+input tokens and the requested maximum output. `cost_usd` is the actual
+provider-reported usage cost. Only sanitized attempt information is returned;
+internal exception messages and provider credentials are never exposed.
 
 ## Usage summary
 

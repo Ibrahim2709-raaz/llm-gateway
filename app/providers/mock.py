@@ -1,7 +1,8 @@
+from decimal import Decimal
 from math import ceil
 from typing import Literal
 
-from app.providers.base import ProviderResult
+from app.providers.base import ModelRoutingProfile, ProviderResult
 from app.schemas.chat import ChatCompletionRequest
 
 
@@ -12,6 +13,13 @@ def estimate_tokens(text: str) -> int:
 class MockProvider:
     name = "mock"
     model = "mock-1"
+    routing_profile = ModelRoutingProfile(
+        input_cost_per_million_usd=Decimal("0"),
+        output_cost_per_million_usd=Decimal("0"),
+        estimated_latency_ms=5,
+        quality_score=0.1,
+        auto_selectable=False,
+    )
 
     async def complete(self, request: ChatCompletionRequest) -> ProviderResult:
         latest_message = request.messages[-1]

@@ -25,15 +25,14 @@ availability, and task complexity.
 
 ## Development status
 
-Steps 1 through 8 are complete: MVP planning, API contract design, the FastAPI
+Steps 1 through 9 are complete: MVP planning, API contract design, the FastAPI
 foundation, PostgreSQL/Redis infrastructure, the unified chat-completions API,
 the first real provider integration, API-key authentication, and distributed
-request rate limiting. The gateway now supports OpenAI's Responses API
-alongside its deterministic mock provider, with database-backed customer
-identity and Redis-backed per-customer limits on chat requests.
+request rate limiting, plus intelligent provider routing. The gateway now
+classifies tasks and ranks eligible models by cost, latency, quality, or a
+complexity-aware balanced score.
 
-The next milestone adds intelligent routing based on cost, latency, and task
-complexity.
+The next milestone adds retries and automatic fallback routing.
 
 ## Project documentation
 
@@ -108,6 +107,13 @@ and remain configurable through environment variables.
 
 Until structured tool calling is implemented, incoming `tool` messages are
 sent to OpenAI as clearly labelled user text.
+
+With `model: "auto"`, the router classifies the request as simple, medium, or
+complex, filters candidates by provider allowlist, capability, and
+`max_cost_usd`, then applies the requested `balanced`, `cost`, `latency`, or
+`quality` strategy. The mock adapter is excluded from automatic selection when
+a real provider is available, but remains the local fallback and can always be
+selected explicitly.
 
 Run quality checks:
 
