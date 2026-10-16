@@ -4,6 +4,8 @@ from typing import Literal
 from pydantic import Field, SecretStr, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+DEFAULT_DEVELOPMENT_API_KEY_PEPPER = "development-only-change-me"
+
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
@@ -24,6 +26,7 @@ class Settings(BaseSettings):
     database_max_overflow: int = Field(default=10, ge=0, le=100)
     redis_url: str = "redis://localhost:6379/0"
     dependency_check_timeout_seconds: float = Field(default=1.0, gt=0, le=10)
+    gateway_api_key_pepper: SecretStr = SecretStr(DEFAULT_DEVELOPMENT_API_KEY_PEPPER)
     openai_enabled: bool = False
     openai_api_key: SecretStr | None = None
     openai_model: str = Field(default="gpt-5.6-terra", min_length=1)
@@ -38,6 +41,11 @@ class Settings(BaseSettings):
         )
         if self.openai_enabled and missing_key:
             raise ValueError("OPENAI_API_KEY is required when OPENAI_ENABLED is true")
+        if (
+            self.app_env == "production"
+            and self.gateway_api_key_pepper.get_secret_value() == DEFAULT_DEVELOPMENT_API_KEY_PEPPER
+        ):
+            raise ValueError("GATEWAY_API_KEY_PEPPER must be changed in production")
         return self
 
 

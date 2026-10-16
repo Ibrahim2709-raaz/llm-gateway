@@ -19,12 +19,24 @@ The MVP supports non-streaming text completions only. A request with
 Clients send a gateway-issued API key as a bearer token:
 
 ```http
-Authorization: Bearer gw_live_example
+Authorization: Bearer gw_live_<43-character-secret>
 ```
 
 Provider credentials are configured on the gateway and are never supplied by
 clients. Every endpoint except health checks and Prometheus metrics requires a
 gateway API key.
+
+Create a client and its first key after applying database migrations:
+
+```bash
+llm-gateway-create-key --client-name example --key-name production
+```
+
+The plaintext key is displayed once. The database stores only a visible prefix
+and an HMAC-SHA256 digest created with `GATEWAY_API_KEY_PEPPER`. Missing,
+malformed, unknown, revoked, and inactive-client keys all receive the same
+generic `401 invalid_api_key` response so the endpoint does not reveal account
+state.
 
 ## Request identity
 

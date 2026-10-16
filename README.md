@@ -25,12 +25,13 @@ availability, and task complexity.
 
 ## Development status
 
-Steps 1 through 6 are complete: MVP planning, API contract design, the FastAPI
+Steps 1 through 7 are complete: MVP planning, API contract design, the FastAPI
 foundation, PostgreSQL/Redis infrastructure, the unified chat-completions API,
-and the first real provider integration. The gateway now supports OpenAI's
-Responses API alongside its deterministic mock provider.
+the first real provider integration, and API-key authentication. The gateway
+now supports OpenAI's Responses API alongside its deterministic mock provider,
+with database-backed customer identity on chat requests.
 
-The next milestone adds gateway API-key authentication and customer identity.
+The next milestone adds Redis-backed per-customer rate limiting.
 
 ## Project documentation
 
@@ -59,10 +60,19 @@ Open:
 Try the mock completion endpoint:
 
 ```bash
+llm-gateway-create-key --client-name demo
+
 curl http://localhost:8000/v1/chat/completions \
+  -H "Authorization: Bearer <the-key-printed-above>" \
   -H "Content-Type: application/json" \
   -d '{"messages":[{"role":"user","content":"Explain an LLM gateway."}]}'
 ```
+
+Run `alembic upgrade head` before creating a key. The command prints the API
+key once; save it securely because the gateway stores only a visible prefix
+and an HMAC-SHA256 digest. Set `GATEWAY_API_KEY_PEPPER` to a stable secret in
+every environment, and never change it without rotating all API keys. The
+development default is rejected when `APP_ENV=production`.
 
 The mock provider is deterministic, costs `$0`, and requires no external API
 key. It exists to validate the gateway contract before real provider adapters
@@ -112,6 +122,13 @@ starts FastAPI. To run PostgreSQL and Redis only while developing locally:
 docker compose up -d postgres redis
 alembic upgrade head
 uvicorn app.main:app --reload
+```
+
+With the full Compose stack running, create a client key inside the gateway
+container:
+
+```bash
+docker compose exec gateway llm-gateway-create-key --client-name demo
 ```
 
 Readiness returns HTTP `200` only when both PostgreSQL and Redis respond; it

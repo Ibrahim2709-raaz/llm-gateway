@@ -3,6 +3,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, Request
 
+from app.auth.dependencies import AuthenticatedClient, authenticate_api_key
 from app.schemas.chat import ChatCompletionRequest, ChatCompletionResponse
 from app.services.chat import ChatCompletionService
 
@@ -22,5 +23,6 @@ async def create_chat_completion(
     payload: ChatCompletionRequest,
     request: Request,
     service: Annotated[ChatCompletionService, Depends(get_chat_service)],
+    _authenticated_client: Annotated[AuthenticatedClient, Depends(authenticate_api_key)],
 ) -> ChatCompletionResponse:
     return await service.create(payload, UUID(request.state.request_id))
