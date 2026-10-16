@@ -25,13 +25,15 @@ availability, and task complexity.
 
 ## Development status
 
-Steps 1 through 7 are complete: MVP planning, API contract design, the FastAPI
+Steps 1 through 8 are complete: MVP planning, API contract design, the FastAPI
 foundation, PostgreSQL/Redis infrastructure, the unified chat-completions API,
-the first real provider integration, and API-key authentication. The gateway
-now supports OpenAI's Responses API alongside its deterministic mock provider,
-with database-backed customer identity on chat requests.
+the first real provider integration, API-key authentication, and distributed
+request rate limiting. The gateway now supports OpenAI's Responses API
+alongside its deterministic mock provider, with database-backed customer
+identity and Redis-backed per-customer limits on chat requests.
 
-The next milestone adds Redis-backed per-customer rate limiting.
+The next milestone adds intelligent routing based on cost, latency, and task
+complexity.
 
 ## Project documentation
 
@@ -73,6 +75,13 @@ key once; save it securely because the gateway stores only a visible prefix
 and an HMAC-SHA256 digest. Set `GATEWAY_API_KEY_PEPPER` to a stable secret in
 every environment, and never change it without rotating all API keys. The
 development default is rejected when `APP_ENV=production`.
+
+Each authenticated customer is allowed 60 requests per 60-second window by
+default. Configure this with `REQUEST_RATE_LIMIT` and
+`REQUEST_RATE_LIMIT_WINDOW_SECONDS`. Successful responses include limit,
+remaining, and reset headers; rejected requests return `429` and `Retry-After`.
+The gateway fails closed with `503 rate_limit_unavailable` if Redis cannot make
+a safe rate-limit decision.
 
 The mock provider is deterministic, costs `$0`, and requires no external API
 key. It exists to validate the gateway contract before real provider adapters

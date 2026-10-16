@@ -52,6 +52,28 @@ X-Request-ID: 0a8b43e4-47f0-4eb7-b5a1-8f56d1dc40d5
 The same value appears in success metadata, errors, structured logs, and usage
 records.
 
+## Request rate limits
+
+The chat endpoint consumes one request from a Redis-backed fixed window for the
+authenticated customer. The default policy is 60 requests per 60 seconds and
+can be configured with `REQUEST_RATE_LIMIT` and
+`REQUEST_RATE_LIMIT_WINDOW_SECONDS`.
+
+Accepted responses include:
+
+```http
+X-RateLimit-Limit: 60
+X-RateLimit-Remaining: 59
+X-RateLimit-Reset: 1790707260
+```
+
+`X-RateLimit-Reset` is the Unix timestamp when the current window expires. A
+rejected request returns `429 rate_limit_exceeded`, the same three headers, and
+`Retry-After` in seconds. Limits are isolated by customer rather than API key,
+so rotating or creating another key does not bypass the policy. If Redis cannot
+make an atomic decision, the gateway fails closed with
+`503 rate_limit_unavailable` to avoid uncontrolled provider spending.
+
 ## Create a chat completion
 
 ```http
@@ -213,6 +235,7 @@ All API errors use one envelope:
 | 429 | `rate_limit_exceeded` | The customer's request limit is exhausted. |
 | 502 | `provider_error` | All attempts ended with non-timeout provider failures. |
 | 503 | `no_provider_available` | No healthy candidate satisfies the request policy. |
+| 503 | `rate_limit_unavailable` | Redis could not make a safe rate-limit decision. |
 | 504 | `provider_timeout` | All eligible provider attempts timed out. |
 
 Rate-limit responses include `Retry-After` in seconds. Internal errors use a

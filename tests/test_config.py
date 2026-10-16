@@ -17,6 +17,15 @@ def test_dependency_timeout_must_be_positive() -> None:
         Settings(_env_file=None, dependency_check_timeout_seconds=0)
 
 
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [("request_rate_limit", 0), ("request_rate_limit_window_seconds", 0)],
+)
+def test_rate_limit_settings_must_be_positive(field: str, value: int) -> None:
+    with pytest.raises(ValidationError):
+        Settings(_env_file=None, **{field: value})
+
+
 def test_openai_requires_a_nonempty_key_when_enabled() -> None:
     with pytest.raises(ValidationError):
         Settings(_env_file=None, openai_enabled=True, openai_api_key="")

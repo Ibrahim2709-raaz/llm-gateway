@@ -48,6 +48,9 @@ def test_create_chat_completion_with_mock_provider(client: TestClient) -> None:
         "attempts": [{"provider": "mock", "model": "mock-1", "outcome": "success"}],
     }
     assert response.headers["x-request-id"] == request_id
+    assert response.headers["x-ratelimit-limit"] == "60"
+    assert response.headers["x-ratelimit-remaining"] == "59"
+    assert response.headers["x-ratelimit-reset"] == "1790707260"
     UUID(body["gateway"]["request_id"])
 
 

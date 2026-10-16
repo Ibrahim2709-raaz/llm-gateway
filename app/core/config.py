@@ -26,6 +26,8 @@ class Settings(BaseSettings):
     database_max_overflow: int = Field(default=10, ge=0, le=100)
     redis_url: str = "redis://localhost:6379/0"
     dependency_check_timeout_seconds: float = Field(default=1.0, gt=0, le=10)
+    request_rate_limit: int = Field(default=60, ge=1, le=1_000_000)
+    request_rate_limit_window_seconds: int = Field(default=60, ge=1, le=86_400)
     gateway_api_key_pepper: SecretStr = SecretStr(DEFAULT_DEVELOPMENT_API_KEY_PEPPER)
     openai_enabled: bool = False
     openai_api_key: SecretStr | None = None

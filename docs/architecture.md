@@ -89,6 +89,8 @@ reproducible after a provider changes its pricing.
   both an explicit enable flag and a credential.
 - Provider SDK retries are disabled so retry and fallback behavior remains
   observable and controlled by the gateway execution layer.
+- Request limits use one atomic Redis script and customer-scoped keys. The
+  gateway fails closed when Redis cannot make a safe limit decision.
 
 ## Technology choices
 
