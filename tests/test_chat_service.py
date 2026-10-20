@@ -94,6 +94,21 @@ async def test_service_rejects_known_model_excluded_by_policy() -> None:
 
 
 @pytest.mark.anyio
+async def test_service_returns_fallback_attempt_metadata() -> None:
+    primary = FailingProvider(ProviderUnavailableError("down"))
+    fallback = SuccessfulProvider()
+    service = ChatCompletionService((primary, fallback))
+
+    result = await service.create(make_request(), uuid4())
+
+    assert result.gateway.provider == fallback.name
+    assert [attempt.model_dump() for attempt in result.gateway.attempts] == [
+        {"provider": "failing", "model": "failing-1", "outcome": "unavailable"},
+        {"provider": "successful", "model": "successful-1", "outcome": "success"},
+    ]
+
+
+@pytest.mark.anyio
 @pytest.mark.parametrize(
     ("provider_error", "status_code", "code"),
     [

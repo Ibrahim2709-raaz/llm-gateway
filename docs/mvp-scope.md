@@ -135,8 +135,8 @@ The MVP is complete when all of the following are demonstrated:
 - [ ] Two customers have independent rate limits, caches, and budgets.
 - [x] `model: auto` selects a model and exposes the routing attempts in gateway
       metadata.
-- [ ] A simulated temporary provider failure triggers retry and fallback.
-- [ ] A permanent provider error is not retried.
+- [x] A simulated temporary provider failure triggers retry and fallback.
+- [x] A permanent provider error is not retried.
 - [ ] A repeated cacheable request avoids a second provider call.
 - [ ] A request over its rate limit receives `429 Too Many Requests`.
 - [ ] A request over its budget is rejected before a paid provider call.

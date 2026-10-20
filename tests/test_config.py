@@ -26,6 +26,15 @@ def test_rate_limit_settings_must_be_positive(field: str, value: int) -> None:
         Settings(_env_file=None, **{field: value})
 
 
+def test_retry_max_delay_cannot_be_lower_than_base_delay() -> None:
+    with pytest.raises(ValidationError, match="PROVIDER_RETRY_MAX_DELAY_SECONDS"):
+        Settings(
+            _env_file=None,
+            provider_retry_base_delay_seconds=2,
+            provider_retry_max_delay_seconds=1,
+        )
+
+
 def test_openai_requires_a_nonempty_key_when_enabled() -> None:
     with pytest.raises(ValidationError):
         Settings(_env_file=None, openai_enabled=True, openai_api_key="")

@@ -23,9 +23,15 @@ class RoutingDecision:
 
 
 @dataclass(frozen=True, slots=True)
-class _Candidate:
+class RoutingCandidate:
     provider: ChatProvider
     estimated_cost_usd: Decimal
+
+
+@dataclass(frozen=True, slots=True)
+class RoutingPlan:
+    candidates: tuple[RoutingCandidate, ...]
+    task_complexity: TaskComplexity
 
 
 def estimate_prompt_tokens(request: ChatCompletionRequest) -> int:
@@ -56,6 +62,15 @@ class ProviderRouter:
         self.providers = providers
 
     def route(self, request: ChatCompletionRequest) -> RoutingDecision:
+        plan = self.plan(request)
+        selected = plan.candidates[0]
+        return RoutingDecision(
+            provider=selected.provider,
+            task_complexity=plan.task_complexity,
+            estimated_cost_usd=selected.estimated_cost_usd,
+        )
+
+    def plan(self, request: ChatCompletionRequest) -> RoutingPlan:
         task_complexity = classify_task(request)
         known_model = any(provider.model == request.model for provider in self.providers)
         if request.model != "auto" and not known_model:
@@ -78,28 +93,27 @@ class ProviderRouter:
             )
 
         if request.model != "auto":
-            selected = candidates[0]
+            ranked_candidates = candidates
         else:
             auto_candidates = [
                 candidate
                 for candidate in candidates
                 if candidate.provider.routing_profile.auto_selectable
             ]
-            selected = self._rank(
+            ranked_candidates = self._rank(
                 auto_candidates or candidates, request.routing.strategy, task_complexity
             )
-        return RoutingDecision(
-            provider=selected.provider,
+        return RoutingPlan(
+            candidates=tuple(ranked_candidates),
             task_complexity=task_complexity,
-            estimated_cost_usd=selected.estimated_cost_usd,
         )
 
     def _eligible_candidates(
         self,
         request: ChatCompletionRequest,
         task_complexity: TaskComplexity,
-    ) -> list[_Candidate]:
-        candidates: list[_Candidate] = []
+    ) -> list[RoutingCandidate]:
+        candidates: list[RoutingCandidate] = []
         for provider in self.providers:
             if not self._matches_non_cost_policy(provider, request, task_complexity):
                 continue
@@ -109,7 +123,9 @@ class ProviderRouter:
                 str(request.routing.max_cost_usd)
             ):
                 continue
-            candidates.append(_Candidate(provider=provider, estimated_cost_usd=estimated_cost))
+            candidates.append(
+                RoutingCandidate(provider=provider, estimated_cost_usd=estimated_cost)
+            )
         return candidates
 
     @staticmethod
@@ -133,12 +149,12 @@ class ProviderRouter:
 
     @staticmethod
     def _rank(
-        candidates: list[_Candidate],
+        candidates: list[RoutingCandidate],
         strategy: str,
         task_complexity: TaskComplexity,
-    ) -> _Candidate:
+    ) -> list[RoutingCandidate]:
         if strategy == "cost":
-            return min(
+            return sorted(
                 candidates,
                 key=lambda candidate: (
                     candidate.estimated_cost_usd,
@@ -146,7 +162,7 @@ class ProviderRouter:
                 ),
             )
         if strategy == "latency":
-            return min(
+            return sorted(
                 candidates,
                 key=lambda candidate: (
                     candidate.provider.routing_profile.estimated_latency_ms,
@@ -154,20 +170,20 @@ class ProviderRouter:
                 ),
             )
         if strategy == "quality":
-            return max(
+            return sorted(
                 candidates,
                 key=lambda candidate: (
-                    candidate.provider.routing_profile.quality_score,
-                    -candidate.provider.routing_profile.estimated_latency_ms,
+                    -candidate.provider.routing_profile.quality_score,
+                    candidate.provider.routing_profile.estimated_latency_ms,
                 ),
             )
-        return max(
+        return sorted(
             candidates,
-            key=lambda candidate: ProviderRouter._balanced_score(candidate, task_complexity),
+            key=lambda candidate: -ProviderRouter._balanced_score(candidate, task_complexity),
         )
 
     @staticmethod
-    def _balanced_score(candidate: _Candidate, task_complexity: TaskComplexity) -> float:
+    def _balanced_score(candidate: RoutingCandidate, task_complexity: TaskComplexity) -> float:
         profile = candidate.provider.routing_profile
         weights = {
             "simple": (0.30, 0.35, 0.35),

@@ -25,14 +25,14 @@ availability, and task complexity.
 
 ## Development status
 
-Steps 1 through 9 are complete: MVP planning, API contract design, the FastAPI
+Steps 1 through 10 are complete: MVP planning, API contract design, the FastAPI
 foundation, PostgreSQL/Redis infrastructure, the unified chat-completions API,
 the first real provider integration, API-key authentication, and distributed
-request rate limiting, plus intelligent provider routing. The gateway now
-classifies tasks and ranks eligible models by cost, latency, quality, or a
-complexity-aware balanced score.
+request rate limiting, intelligent provider routing, and resilient execution.
+The gateway retries temporary upstream failures with exponential backoff and
+falls back through the remaining policy-compliant route.
 
-The next milestone adds retries and automatic fallback routing.
+The next milestone adds Redis response caching.
 
 ## Project documentation
 
@@ -114,6 +114,13 @@ complex, filters candidates by provider allowlist, capability, and
 `quality` strategy. The mock adapter is excluded from automatic selection when
 a real provider is available, but remains the local fallback and can always be
 selected explicitly.
+
+Temporary timeouts, provider rate limits, and availability failures are retried
+before the gateway advances to the next ranked candidate. Configure retry
+behavior with `PROVIDER_MAX_RETRIES`, `PROVIDER_RETRY_BASE_DELAY_SECONDS`, and
+`PROVIDER_RETRY_MAX_DELAY_SECONDS`. Permanent request errors are returned
+immediately and are never retried or routed to another provider. Successful
+responses list every sanitized retry and fallback attempt in order.
 
 Run quality checks:
 

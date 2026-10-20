@@ -4,6 +4,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, Request, Response
 
 from app.auth.dependencies import AuthenticatedClient, authenticate_api_key
+from app.core.config import get_settings
 from app.rate_limits.dependencies import enforce_request_rate_limit
 from app.rate_limits.service import RateLimitStatus
 from app.schemas.chat import ChatCompletionRequest, ChatCompletionResponse
@@ -13,7 +14,13 @@ router = APIRouter(prefix="/v1/chat", tags=["Chat"])
 
 
 def get_chat_service(request: Request) -> ChatCompletionService:
-    return ChatCompletionService(request.app.state.resources.providers)
+    settings = get_settings()
+    return ChatCompletionService(
+        request.app.state.resources.providers,
+        max_retries=settings.provider_max_retries,
+        retry_base_delay_seconds=settings.provider_retry_base_delay_seconds,
+        retry_max_delay_seconds=settings.provider_retry_max_delay_seconds,
+    )
 
 
 @router.post(

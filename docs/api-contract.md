@@ -131,6 +131,20 @@ optimizes estimated price (`cost`), typical response time (`latency`), model
 capability (`quality`), or a complexity-aware weighted score (`balanced`). An
 explicit model bypasses ranking but still respects allowlists and cost limits.
 
+### Retries and fallback
+
+Timeouts, upstream rate limits, and temporary availability failures are
+retryable. The gateway retries the same provider with capped exponential
+backoff, then advances through the remaining ranked candidates. Every fallback
+candidate already satisfies the request's provider allowlist, task capability,
+and estimated-cost ceiling. Provider request errors are treated as permanent:
+they return immediately and are never retried or fallen back.
+
+`gateway.attempts` preserves the execution order and reports only sanitized
+outcomes: `success`, `timeout`, `rate_limited`, `unavailable`, or `error`. If
+every eligible attempt times out, the gateway returns `504 provider_timeout`;
+other exhausted retryable routes return `502 provider_error`.
+
 ### Example response
 
 ```json
@@ -138,7 +152,7 @@ explicit model bypasses ranking but still respects allowlists and cost limits.
   "id": "chatcmpl_01jexample",
   "object": "chat.completion",
   "created": 1790707200,
-  "model": "gpt-4.1-mini",
+  "model": "claude-sonnet",
   "choices": [
     {
       "index": 0,
@@ -156,7 +170,7 @@ explicit model bypasses ranking but still respects allowlists and cost limits.
   },
   "gateway": {
     "request_id": "0a8b43e4-47f0-4eb7-b5a1-8f56d1dc40d5",
-    "provider": "openai",
+    "provider": "anthropic",
     "cost_usd": 0.000081,
     "cached": false,
     "routing_strategy": "balanced",
@@ -166,6 +180,16 @@ explicit model bypasses ranking but still respects allowlists and cost limits.
       {
         "provider": "openai",
         "model": "gpt-4.1-mini",
+        "outcome": "timeout"
+      },
+      {
+        "provider": "openai",
+        "model": "gpt-4.1-mini",
+        "outcome": "timeout"
+      },
+      {
+        "provider": "anthropic",
+        "model": "claude-sonnet",
         "outcome": "success"
       }
     ]

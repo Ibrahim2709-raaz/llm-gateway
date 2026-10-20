@@ -102,6 +102,18 @@ def test_router_honors_requested_strategy(strategy: str, expected_provider: str)
     assert decision.task_complexity == "simple"
 
 
+def test_routing_plan_preserves_ranked_fallback_order() -> None:
+    router = ProviderRouter(make_providers())  # type: ignore[arg-type]
+
+    routing_plan = router.plan(make_request(strategy="latency"))
+
+    assert [candidate.provider.name for candidate in routing_plan.candidates] == [
+        "fast",
+        "cheap",
+        "quality",
+    ]
+
+
 def test_balanced_routing_prioritizes_quality_for_complex_tasks() -> None:
     router = ProviderRouter(make_providers())  # type: ignore[arg-type]
 

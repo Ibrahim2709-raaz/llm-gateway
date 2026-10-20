@@ -94,6 +94,11 @@ reproducible after a provider changes its pricing.
 - Automatic routing uses rule-based task classification and immutable model
   profiles for price, typical latency, quality, and maximum task complexity.
   Per-request allowlists and cost ceilings are applied before scoring.
+- The execution layer retries only temporary, sanitized provider failures with
+  capped exponential backoff. After a provider exhausts its retry allowance,
+  execution advances through the router's ordered eligible candidates.
+- Permanent provider request errors are neither retried nor fallen back because
+  another attempt cannot safely repair an invalid request.
 
 ## Technology choices
 
