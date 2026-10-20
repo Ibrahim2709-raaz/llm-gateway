@@ -25,14 +25,15 @@ availability, and task complexity.
 
 ## Development status
 
-Steps 1 through 10 are complete: MVP planning, API contract design, the FastAPI
+Steps 1 through 11 are complete: MVP planning, API contract design, the FastAPI
 foundation, PostgreSQL/Redis infrastructure, the unified chat-completions API,
 the first real provider integration, API-key authentication, and distributed
 request rate limiting, intelligent provider routing, and resilient execution.
-The gateway retries temporary upstream failures with exponential backoff and
-falls back through the remaining policy-compliant route.
+The gateway also caches exact-match successful responses in Redis with strict
+customer isolation. The full production-ready project is now approximately
+55% complete.
 
-The next milestone adds Redis response caching.
+The next milestone adds usage budgets and durable cost tracking.
 
 ## Project documentation
 
@@ -121,6 +122,12 @@ behavior with `PROVIDER_MAX_RETRIES`, `PROVIDER_RETRY_BASE_DELAY_SECONDS`, and
 `PROVIDER_RETRY_MAX_DELAY_SECONDS`. Permanent request errors are returned
 immediately and are never retried or routed to another provider. Successful
 responses list every sanitized retry and fallback attempt in order.
+
+Exact-match responses are cached for 300 seconds by default. Configure this
+with `RESPONSE_CACHE_ENABLED` and `RESPONSE_CACHE_TTL_SECONDS`, or bypass both
+cache reads and writes per request with `routing.disable_cache: true`. Cache
+keys contain a hash of all output-affecting request options and are isolated by
+customer. Cache failures do not block provider requests.
 
 Run quality checks:
 

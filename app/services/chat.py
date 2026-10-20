@@ -4,6 +4,7 @@ from uuid import UUID, uuid4
 import structlog
 from fastapi import status
 
+from app.cache.service import ResponseCache
 from app.core.errors import GatewayError
 from app.execution.service import (
     ProviderExecutionExhausted,
@@ -33,6 +34,7 @@ class ChatCompletionService:
         retry_base_delay_seconds: float = 0,
         retry_max_delay_seconds: float = 0,
         sleeper: Sleeper | None = None,
+        response_cache: ResponseCache | None = None,
     ) -> None:
         self.router = ProviderRouter(providers)
         self.executor = ProviderExecutor(
@@ -41,10 +43,24 @@ class ChatCompletionService:
             retry_max_delay_seconds=retry_max_delay_seconds,
             sleeper=sleeper,
         )
+        self.response_cache = response_cache
 
     async def create(
-        self, request: ChatCompletionRequest, request_id: UUID
+        self,
+        request: ChatCompletionRequest,
+        request_id: UUID,
+        client_id: UUID,
     ) -> ChatCompletionResponse:
+        if self.response_cache is not None and not request.routing.disable_cache:
+            cached_response = await self.response_cache.get(client_id, request)
+            if cached_response is not None:
+                logger.info(
+                    "response_cache_hit",
+                    request_id=str(request_id),
+                    client_id=str(client_id),
+                )
+                return self._cache_hit_response(cached_response, request_id)
+
         routing_plan = self.router.plan(request)
         primary = routing_plan.candidates[0]
         logger.info(
@@ -86,7 +102,7 @@ class ChatCompletionService:
         total_tokens = result.prompt_tokens + result.completion_tokens
         routing_strategy = "explicit" if request.model != "auto" else request.routing.strategy
 
-        return ChatCompletionResponse(
+        response = ChatCompletionResponse(
             id=f"chatcmpl_{uuid4().hex}",
             created=int(datetime.now(UTC).timestamp()),
             model=result.model,
@@ -112,4 +128,28 @@ class ChatCompletionService:
                 estimated_cost_usd=float(execution.candidate.estimated_cost_usd),
                 attempts=list(execution.attempts),
             ),
+        )
+        if self.response_cache is not None and not request.routing.disable_cache:
+            await self.response_cache.set(client_id, request, response)
+        return response
+
+    @staticmethod
+    def _cache_hit_response(
+        cached_response: ChatCompletionResponse,
+        request_id: UUID,
+    ) -> ChatCompletionResponse:
+        gateway = cached_response.gateway.model_copy(
+            update={
+                "request_id": request_id,
+                "cost_usd": 0.0,
+                "cached": True,
+                "attempts": [],
+            }
+        )
+        return cached_response.model_copy(
+            update={
+                "id": f"chatcmpl_{uuid4().hex}",
+                "created": int(datetime.now(UTC).timestamp()),
+                "gateway": gateway,
+            }
         )

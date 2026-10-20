@@ -137,7 +137,7 @@ The MVP is complete when all of the following are demonstrated:
       metadata.
 - [x] A simulated temporary provider failure triggers retry and fallback.
 - [x] A permanent provider error is not retried.
-- [ ] A repeated cacheable request avoids a second provider call.
+- [x] A repeated cacheable request avoids a second provider call.
 - [ ] A request over its rate limit receives `429 Too Many Requests`.
 - [ ] A request over its budget is rejected before a paid provider call.
 - [ ] Successful provider calls store tokens, cost, latency, and status.

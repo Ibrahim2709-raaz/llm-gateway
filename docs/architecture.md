@@ -99,6 +99,9 @@ reproducible after a provider changes its pricing.
   execution advances through the router's ordered eligible candidates.
 - Permanent provider request errors are neither retried nor fallen back because
   another attempt cannot safely repair an invalid request.
+- Exact-match cache keys hash all output-affecting request fields and use the
+  authenticated customer ID as an isolation boundary. Cache access fails open
+  because it is an optimization, while rate limiting continues to fail closed.
 
 ## Technology choices
 

@@ -285,10 +285,21 @@ token limit, and all output-affecting options.
 A cache hit:
 
 - Returns a new gateway request ID.
+- Returns a new completion ID and response timestamp.
 - Preserves the original model and provider fields.
 - Sets `gateway.cached` to `true`.
+- Sets `gateway.cost_usd` to `0` and returns an empty attempt list because no
+  provider was called for the current request.
 - Does not create a paid-provider usage charge.
 - Still counts against request-rate limits.
+
+Successful exact-match responses expire after `RESPONSE_CACHE_TTL_SECONDS`
+(300 seconds by default). Cache keys are versioned, include the customer UUID,
+and contain a SHA-256 digest rather than raw prompts. Provider allowlists are
+canonicalized so their order does not create duplicate entries. Setting
+`routing.disable_cache` bypasses both reads and writes. Redis cache failures
+fail open: the request proceeds through routing and provider execution while a
+sanitized warning is logged.
 
 ## Processing guarantees
 

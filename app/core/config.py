@@ -28,6 +28,8 @@ class Settings(BaseSettings):
     dependency_check_timeout_seconds: float = Field(default=1.0, gt=0, le=10)
     request_rate_limit: int = Field(default=60, ge=1, le=1_000_000)
     request_rate_limit_window_seconds: int = Field(default=60, ge=1, le=86_400)
+    response_cache_enabled: bool = True
+    response_cache_ttl_seconds: int = Field(default=300, ge=1, le=86_400)
     gateway_api_key_pepper: SecretStr = SecretStr(DEFAULT_DEVELOPMENT_API_KEY_PEPPER)
     openai_enabled: bool = False
     openai_api_key: SecretStr | None = None

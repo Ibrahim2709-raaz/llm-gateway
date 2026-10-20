@@ -6,10 +6,13 @@ os.environ["APP_ENV"] = "test"
 import pytest
 from fastapi.testclient import TestClient
 
+from app.api.routes.chat import get_chat_service
 from app.auth.dependencies import AuthenticatedClient, authenticate_api_key
 from app.main import app
+from app.providers.mock import MockProvider
 from app.rate_limits.dependencies import enforce_request_rate_limit
 from app.rate_limits.service import RateLimitStatus
+from app.services.chat import ChatCompletionService
 
 
 @pytest.fixture
@@ -30,11 +33,16 @@ def client() -> TestClient:
             allowed=True,
         )
 
+    def chat_service() -> ChatCompletionService:
+        return ChatCompletionService((MockProvider(),))
+
     app.dependency_overrides[authenticate_api_key] = authenticated_client
     app.dependency_overrides[enforce_request_rate_limit] = allowed_request
+    app.dependency_overrides[get_chat_service] = chat_service
     try:
         with TestClient(app) as test_client:
             yield test_client
     finally:
         app.dependency_overrides.pop(authenticate_api_key, None)
         app.dependency_overrides.pop(enforce_request_rate_limit, None)
+        app.dependency_overrides.pop(get_chat_service, None)

@@ -69,7 +69,7 @@ async def test_service_selects_explicit_model_and_reports_cost() -> None:
     provider = SuccessfulProvider()
     service = ChatCompletionService((provider,))
 
-    result = await service.create(make_request(model=provider.model), uuid4())
+    result = await service.create(make_request(model=provider.model), uuid4(), uuid4())
 
     assert result.model == provider.model
     assert result.gateway.provider == provider.name
@@ -86,7 +86,9 @@ async def test_service_rejects_known_model_excluded_by_policy() -> None:
 
     with pytest.raises(GatewayError) as captured:
         await service.create(
-            make_request(model=provider.model, allowed_providers=["another"]), uuid4()
+            make_request(model=provider.model, allowed_providers=["another"]),
+            uuid4(),
+            uuid4(),
         )
 
     assert captured.value.status_code == 503
@@ -99,7 +101,7 @@ async def test_service_returns_fallback_attempt_metadata() -> None:
     fallback = SuccessfulProvider()
     service = ChatCompletionService((primary, fallback))
 
-    result = await service.create(make_request(), uuid4())
+    result = await service.create(make_request(), uuid4(), uuid4())
 
     assert result.gateway.provider == fallback.name
     assert [attempt.model_dump() for attempt in result.gateway.attempts] == [
@@ -124,7 +126,7 @@ async def test_service_maps_provider_errors(
     service = ChatCompletionService((FailingProvider(provider_error),))
 
     with pytest.raises(GatewayError) as captured:
-        await service.create(make_request(), uuid4())
+        await service.create(make_request(), uuid4(), uuid4())
 
     assert captured.value.status_code == status_code
     assert captured.value.code == code

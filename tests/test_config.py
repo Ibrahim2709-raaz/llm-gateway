@@ -19,9 +19,13 @@ def test_dependency_timeout_must_be_positive() -> None:
 
 @pytest.mark.parametrize(
     ("field", "value"),
-    [("request_rate_limit", 0), ("request_rate_limit_window_seconds", 0)],
+    [
+        ("request_rate_limit", 0),
+        ("request_rate_limit_window_seconds", 0),
+        ("response_cache_ttl_seconds", 0),
+    ],
 )
-def test_rate_limit_settings_must_be_positive(field: str, value: int) -> None:
+def test_positive_runtime_settings(field: str, value: int) -> None:
     with pytest.raises(ValidationError):
         Settings(_env_file=None, **{field: value})
 
