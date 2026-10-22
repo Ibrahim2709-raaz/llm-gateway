@@ -31,6 +31,7 @@ dev = [
 
 [project.scripts]
 llm-gateway-create-key = "app.cli.create_api_key:main"
+llm-gateway-set-budget = "app.cli.set_budget:main"
 
 [tool.hatch.build.targets.wheel]
 packages = ["app"]

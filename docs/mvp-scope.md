@@ -138,13 +138,13 @@ The MVP is complete when all of the following are demonstrated:
 - [x] A simulated temporary provider failure triggers retry and fallback.
 - [x] A permanent provider error is not retried.
 - [x] A repeated cacheable request avoids a second provider call.
-- [ ] A request over its rate limit receives `429 Too Many Requests`.
-- [ ] A request over its budget is rejected before a paid provider call.
-- [ ] Successful provider calls store tokens, cost, latency, and status.
+- [x] A request over its rate limit receives `429 Too Many Requests`.
+- [x] A request over its budget is rejected before a paid provider call.
+- [x] Successful provider calls store tokens, cost, latency, and status.
 - [ ] Prometheus exposes gateway and provider metrics.
 - [ ] Grafana shows traffic, latency, failures, fallback activity, and cost.
 - [ ] Logs can trace one request without revealing credentials.
-- [ ] Automated tests cover authentication, routing, fallback, caching, rate
+- [x] Automated tests cover authentication, routing, fallback, caching, rate
       limiting, and budget enforcement.
 
 ## Definition of done for every feature

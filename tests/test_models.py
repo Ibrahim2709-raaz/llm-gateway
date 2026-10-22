@@ -18,3 +18,9 @@ def test_sensitive_api_key_material_is_not_stored() -> None:
     assert "key_hash" in columns
     assert "key_prefix" in columns
     assert "key" not in columns
+
+
+def test_usage_records_snapshot_provider_identity() -> None:
+    columns = set(UsageRecord.__table__.columns.keys())
+
+    assert {"provider", "model", "input_tokens", "output_tokens", "cost_usd"} <= columns

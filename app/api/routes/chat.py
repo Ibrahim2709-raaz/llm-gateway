@@ -2,19 +2,25 @@ from typing import Annotated
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Request, Response
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth.dependencies import AuthenticatedClient, authenticate_api_key
 from app.cache.service import RedisResponseCache
 from app.core.config import get_settings
+from app.db.session import get_database_session
 from app.rate_limits.dependencies import enforce_request_rate_limit
 from app.rate_limits.service import RateLimitStatus
 from app.schemas.chat import ChatCompletionRequest, ChatCompletionResponse
 from app.services.chat import ChatCompletionService
+from app.usage.service import DatabaseUsageService
 
 router = APIRouter(prefix="/v1/chat", tags=["Chat"])
 
 
-def get_chat_service(request: Request) -> ChatCompletionService:
+def get_chat_service(
+    request: Request,
+    session: Annotated[AsyncSession, Depends(get_database_session)],
+) -> ChatCompletionService:
     settings = get_settings()
     response_cache = (
         RedisResponseCache(
@@ -30,6 +36,7 @@ def get_chat_service(request: Request) -> ChatCompletionService:
         retry_base_delay_seconds=settings.provider_retry_base_delay_seconds,
         retry_max_delay_seconds=settings.provider_retry_max_delay_seconds,
         response_cache=response_cache,
+        usage_tracker=DatabaseUsageService(session),
     )
 
 

@@ -225,6 +225,28 @@ Example response:
 ```
 
 The endpoint only returns usage belonging to the authenticated customer.
+`request_count` includes successful provider responses and cache hits. Cached
+requests contribute zero tokens and cost, while failed and in-flight requests
+are excluded from reported usage. When no monthly budget is configured,
+`budget_usd` and `remaining_budget_usd` are `null`.
+
+Before a provider call, the gateway locks the customer's monthly budget row and
+durably reserves the highest estimated cost among eligible fallback candidates.
+This prevents concurrent requests from independently spending the same
+remaining balance. A successful call replaces the reservation with actual
+provider-reported tokens and cost; failures release it. Durable records also
+snapshot provider, model, latency, and status. Requests that would exceed the
+remaining budget receive `402 budget_exceeded` before any provider call.
+
+Operators create or update a monthly limit with:
+
+```bash
+llm-gateway-set-budget \
+  --client-id <client-uuid> \
+  --period 2026-10 \
+  --limit-usd 25 \
+  --alert-threshold-percent 80
+```
 
 ## Health and metrics
 

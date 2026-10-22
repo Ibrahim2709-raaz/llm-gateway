@@ -25,15 +25,16 @@ availability, and task complexity.
 
 ## Development status
 
-Steps 1 through 11 are complete: MVP planning, API contract design, the FastAPI
+Steps 1 through 12 are complete: MVP planning, API contract design, the FastAPI
 foundation, PostgreSQL/Redis infrastructure, the unified chat-completions API,
 the first real provider integration, API-key authentication, and distributed
 request rate limiting, intelligent provider routing, and resilient execution.
 The gateway also caches exact-match successful responses in Redis with strict
-customer isolation. The full production-ready project is now approximately
-55% complete.
+customer isolation, reserves monthly budget before paid calls, and durably
+records actual tokens, cost, latency, provider, and model. The full
+production-ready project is now approximately 65% complete.
 
-The next milestone adds usage budgets and durable cost tracking.
+The next milestone adds Prometheus metrics and Grafana dashboards.
 
 ## Project documentation
 
@@ -71,10 +72,10 @@ curl http://localhost:8000/v1/chat/completions \
 ```
 
 Run `alembic upgrade head` before creating a key. The command prints the API
-key once; save it securely because the gateway stores only a visible prefix
-and an HMAC-SHA256 digest. Set `GATEWAY_API_KEY_PEPPER` to a stable secret in
-every environment, and never change it without rotating all API keys. The
-development default is rejected when `APP_ENV=production`.
+key and customer ID once; save the key securely because the gateway stores only
+a visible prefix and an HMAC-SHA256 digest. Set `GATEWAY_API_KEY_PEPPER` to a
+stable secret in every environment, and never change it without rotating all
+API keys. The development default is rejected when `APP_ENV=production`.
 
 Each authenticated customer is allowed 60 requests per 60-second window by
 default. Configure this with `REQUEST_RATE_LIMIT` and
@@ -129,6 +130,23 @@ cache reads and writes per request with `routing.disable_cache: true`. Cache
 keys contain a hash of all output-affecting request options and are isolated by
 customer. Cache failures do not block provider requests.
 
+Configure a monthly customer budget using the client ID printed by the key
+creation command:
+
+```bash
+llm-gateway-set-budget \
+  --client-id <client-uuid> \
+  --period 2026-10 \
+  --limit-usd 25
+```
+
+The gateway atomically reserves the highest eligible estimated request cost
+before making a provider call. Successful requests settle that reservation to
+actual usage; failed requests release it. View the authenticated customer's
+monthly totals with `GET /v1/usage?period=2026-10`. Customers without a budget
+remain unlimited, and their `budget_usd` and `remaining_budget_usd` values are
+`null`.
+
 Run quality checks:
 
 ```bash
@@ -158,6 +176,13 @@ container:
 
 ```bash
 docker compose exec gateway llm-gateway-create-key --client-name demo
+```
+
+Use the printed client ID to set a budget:
+
+```bash
+docker compose exec gateway llm-gateway-set-budget \
+  --client-id <client-uuid> --period 2026-10 --limit-usd 25
 ```
 
 Readiness returns HTTP `200` only when both PostgreSQL and Redis respond; it

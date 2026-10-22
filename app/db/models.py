@@ -68,6 +68,8 @@ class UsageRecord(UUIDPrimaryKeyMixin, Base):
     provider_config_id: Mapped[UUID | None] = mapped_column(
         ForeignKey("provider_configs.id", ondelete="SET NULL")
     )
+    provider: Mapped[str | None] = mapped_column(String(64))
+    model: Mapped[str | None] = mapped_column(String(128))
     input_tokens: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     output_tokens: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     cost_usd: Mapped[Decimal] = mapped_column(Numeric(18, 8), default=Decimal("0"), nullable=False)

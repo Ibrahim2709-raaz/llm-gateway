@@ -3,7 +3,7 @@ import asyncio
 
 from sqlalchemy.ext.asyncio import create_async_engine
 
-from app.auth.api_keys import create_client_api_key
+from app.auth.api_keys import CreatedClientApiKey, create_client_api_key
 from app.core.config import get_settings
 from app.db.session import session_factory
 
@@ -15,7 +15,7 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
-async def create_key(client_name: str, key_name: str) -> str:
+async def create_key(client_name: str, key_name: str) -> CreatedClientApiKey:
     settings = get_settings()
     engine = create_async_engine(settings.database_url, pool_pre_ping=True)
     factory = session_factory(engine)
@@ -27,16 +27,18 @@ async def create_key(client_name: str, key_name: str) -> str:
                 key_name=key_name,
                 pepper=settings.gateway_api_key_pepper.get_secret_value(),
             )
-        return created.token
+        return created
     finally:
         await engine.dispose()
 
 
 def main() -> None:
     arguments = build_parser().parse_args()
-    token = asyncio.run(create_key(arguments.client_name, arguments.key_name))
+    created = asyncio.run(create_key(arguments.client_name, arguments.key_name))
+    print(f"Client ID: {created.client_id}")
+    print(f"API key ID: {created.api_key_id}")
     print("Gateway API key (shown once):")
-    print(token)
+    print(created.token)
 
 
 if __name__ == "__main__":

@@ -181,7 +181,12 @@ class MemoryCache:
 async def test_chat_service_returns_isolated_cache_hit_without_provider_call() -> None:
     provider = CountingProvider()
     cache = MemoryCache()
-    service = ChatCompletionService((provider,), response_cache=cache)
+    tracker = Mock()
+    tracker.reserve = AsyncMock()
+    tracker.settle = AsyncMock()
+    tracker.fail = AsyncMock()
+    tracker.record_cached = AsyncMock()
+    service = ChatCompletionService((provider,), response_cache=cache, usage_tracker=tracker)
     client_id = uuid4()
     first_request_id = uuid4()
     second_request_id = uuid4()
@@ -197,6 +202,7 @@ async def test_chat_service_returns_isolated_cache_hit_without_provider_call() -
     assert second.gateway.attempts == []
     assert second.id != first.id
     assert second.choices == first.choices
+    tracker.record_cached.assert_awaited_once_with(second_request_id, client_id)
 
     await service.create(make_request(), uuid4(), uuid4())
     assert provider.call_count == 2

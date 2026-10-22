@@ -102,6 +102,12 @@ reproducible after a provider changes its pricing.
 - Exact-match cache keys hash all output-affecting request fields and use the
   authenticated customer ID as an isolation boundary. Cache access fails open
   because it is an optimization, while rate limiting continues to fail closed.
+- Monthly budget enforcement locks the customer-period row and inserts a
+  durable maximum-cost reservation before provider execution. Settlement
+  replaces the reservation with actual usage; failure releases its cost.
+- Usage records snapshot provider and model identity alongside token counts,
+  cost, latency, and status so historical accounting does not depend on mutable
+  provider configuration.
 
 ## Technology choices
 

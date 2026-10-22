@@ -77,7 +77,7 @@ paths:
           description: Calendar month in YYYY-MM format.
           schema:
             type: string
-            pattern: "^[0-9]{4}-(0[1-9]|1[0-2])$"
+            pattern: "^[1-9][0-9]{3}-(0[1-9]|1[0-2])$"
             example: 2026-10
       responses:
         "200":
@@ -368,10 +368,10 @@ components:
           type: number
           minimum: 0
         budget_usd:
-          type: number
+          type: [number, "null"]
           minimum: 0
         remaining_budget_usd:
-          type: number
+          type: [number, "null"]
           minimum: 0
     HealthResponse:
       type: object

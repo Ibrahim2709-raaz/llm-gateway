@@ -1,3 +1,5 @@
+import time
+from collections.abc import Callable
 from datetime import UTC, datetime
 from uuid import UUID, uuid4
 
@@ -21,6 +23,7 @@ from app.schemas.chat import (
     ResponseMessage,
     TokenUsage,
 )
+from app.usage.service import UsageTracker
 
 logger = structlog.get_logger(__name__)
 
@@ -35,6 +38,8 @@ class ChatCompletionService:
         retry_max_delay_seconds: float = 0,
         sleeper: Sleeper | None = None,
         response_cache: ResponseCache | None = None,
+        usage_tracker: UsageTracker | None = None,
+        clock: Callable[[], float] = time.perf_counter,
     ) -> None:
         self.router = ProviderRouter(providers)
         self.executor = ProviderExecutor(
@@ -44,6 +49,8 @@ class ChatCompletionService:
             sleeper=sleeper,
         )
         self.response_cache = response_cache
+        self.usage_tracker = usage_tracker
+        self.clock = clock
 
     async def create(
         self,
@@ -54,6 +61,8 @@ class ChatCompletionService:
         if self.response_cache is not None and not request.routing.disable_cache:
             cached_response = await self.response_cache.get(client_id, request)
             if cached_response is not None:
+                if self.usage_tracker is not None:
+                    await self.usage_tracker.record_cached(request_id, client_id)
                 logger.info(
                     "response_cache_hit",
                     request_id=str(request_id),
@@ -62,6 +71,12 @@ class ChatCompletionService:
                 return self._cache_hit_response(cached_response, request_id)
 
         routing_plan = self.router.plan(request)
+        if self.usage_tracker is not None:
+            await self.usage_tracker.reserve(
+                request_id,
+                client_id,
+                max(candidate.estimated_cost_usd for candidate in routing_plan.candidates),
+            )
         primary = routing_plan.candidates[0]
         logger.info(
             "provider_route_planned",
@@ -73,9 +88,11 @@ class ChatCompletionService:
             estimated_cost_usd=str(primary.estimated_cost_usd),
             candidate_count=len(routing_plan.candidates),
         )
+        execution_started = self.clock()
         try:
             execution = await self.executor.execute(routing_plan, request, request_id)
         except ProviderRequestError as exc:
+            await self._record_failed_usage(request_id, client_id, execution_started)
             raise GatewayError(
                 str(exc),
                 code="invalid_request",
@@ -84,6 +101,7 @@ class ChatCompletionService:
                 param="max_tokens",
             ) from exc
         except ProviderExecutionExhausted as exc:
+            await self._record_failed_usage(request_id, client_id, execution_started)
             if exc.all_attempts_timed_out:
                 raise GatewayError(
                     "All eligible provider attempts timed out.",
@@ -97,10 +115,25 @@ class ChatCompletionService:
                 error_type="provider_error",
                 status_code=status.HTTP_502_BAD_GATEWAY,
             ) from exc
+        except Exception:
+            await self._record_failed_usage(request_id, client_id, execution_started)
+            raise
         provider = execution.candidate.provider
         result = execution.result
         total_tokens = result.prompt_tokens + result.completion_tokens
         routing_strategy = "explicit" if request.model != "auto" else request.routing.strategy
+
+        if self.usage_tracker is not None:
+            await self.usage_tracker.settle(
+                request_id,
+                client_id,
+                provider=provider.name,
+                model=result.model,
+                input_tokens=result.prompt_tokens,
+                output_tokens=result.completion_tokens,
+                actual_cost_usd=result.cost_usd,
+                latency_ms=self._latency_ms(execution_started),
+            )
 
         response = ChatCompletionResponse(
             id=f"chatcmpl_{uuid4().hex}",
@@ -132,6 +165,22 @@ class ChatCompletionService:
         if self.response_cache is not None and not request.routing.disable_cache:
             await self.response_cache.set(client_id, request, response)
         return response
+
+    async def _record_failed_usage(
+        self,
+        request_id: UUID,
+        client_id: UUID,
+        execution_started: float,
+    ) -> None:
+        if self.usage_tracker is not None:
+            await self.usage_tracker.fail(
+                request_id,
+                client_id,
+                latency_ms=self._latency_ms(execution_started),
+            )
+
+    def _latency_ms(self, started_at: float) -> int:
+        return max(0, round((self.clock() - started_at) * 1000))
 
     @staticmethod
     def _cache_hit_response(
