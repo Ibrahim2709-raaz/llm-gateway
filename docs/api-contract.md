@@ -265,6 +265,17 @@ Readiness returns `503` when either required dependency is unavailable.
 `GET /metrics` exposes Prometheus text metrics. It does not include raw customer
 IDs, API keys, prompts, or response content.
 
+The gateway publishes these metric families:
+
+- `llm_gateway_requests_total` and `llm_gateway_request_duration_seconds`
+- `llm_gateway_provider_attempts_total` and `llm_gateway_fallbacks_total`
+- `llm_gateway_cache_requests_total`
+- `llm_gateway_rate_limit_decisions_total`
+- `llm_gateway_tokens_total` and `llm_gateway_cost_usd_total`
+
+Labels are intentionally limited to operational dimensions such as provider,
+model, outcome, token type, and cache/rate-limit result.
+
 ## Error format
 
 All API errors use one envelope:

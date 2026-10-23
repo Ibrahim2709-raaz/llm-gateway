@@ -6,6 +6,7 @@ from uuid import UUID
 
 import structlog
 
+from app.observability.metrics import MetricsRecorder
 from app.providers.base import (
     ProviderRateLimitError,
     ProviderRequestError,
@@ -53,11 +54,13 @@ class ProviderExecutor:
         retry_base_delay_seconds: float,
         retry_max_delay_seconds: float,
         sleeper: Sleeper | None = None,
+        metrics: MetricsRecorder | None = None,
     ) -> None:
         self.max_retries = max_retries
         self.retry_base_delay_seconds = retry_base_delay_seconds
         self.retry_max_delay_seconds = retry_max_delay_seconds
         self.sleeper = sleeper or asyncio.sleep
+        self.metrics = metrics
 
     async def execute(
         self,
@@ -69,10 +72,16 @@ class ProviderExecutor:
         last_error: RetryableProviderError | None = None
         for candidate_index, candidate in enumerate(plan.candidates):
             provider = candidate.provider
+            if candidate_index > 0 and self.metrics is not None:
+                self.metrics.record_fallback(
+                    plan.candidates[candidate_index - 1].provider.name,
+                    provider.name,
+                )
             for retry_index in range(self.max_retries + 1):
                 try:
                     result = await provider.complete(request)
                 except ProviderRequestError:
+                    self._record_attempt(provider.name, provider.model, "error")
                     self._log_attempt(
                         request_id,
                         provider.name,
@@ -89,6 +98,7 @@ class ProviderExecutor:
                 ) as error:
                     last_error = error
                     outcome = self._outcome(error)
+                    self._record_attempt(provider.name, provider.model, outcome)
                     attempts.append(
                         RoutingAttempt(
                             provider=provider.name,
@@ -115,6 +125,7 @@ class ProviderExecutor:
                         outcome="success",
                     )
                 )
+                self._record_attempt(provider.name, result.model, "success")
                 self._log_attempt(
                     request_id,
                     provider.name,
@@ -132,6 +143,10 @@ class ProviderExecutor:
         if last_error is None:
             raise RuntimeError("A routing plan must contain at least one candidate")
         raise ProviderExecutionExhausted(tuple(attempts), last_error)
+
+    def _record_attempt(self, provider: str, model: str, outcome: str) -> None:
+        if self.metrics is not None:
+            self.metrics.record_provider_attempt(provider, model, outcome)
 
     def _retry_delay(self, retry_index: int) -> float:
         return min(

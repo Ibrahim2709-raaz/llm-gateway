@@ -108,6 +108,9 @@ reproducible after a provider changes its pricing.
 - Usage records snapshot provider and model identity alongside token counts,
   cost, latency, and status so historical accounting does not depend on mutable
   provider configuration.
+- Prometheus labels are bounded operational dimensions only. Customer IDs,
+  request IDs, prompts, credentials, and response bodies remain out of metrics;
+  PostgreSQL remains the source of truth for customer-level accounting.
 
 ## Technology choices
 
@@ -129,8 +132,9 @@ caching, and circuit-breaker state.
 ### Prometheus and Grafana
 
 Prometheus stores operational time-series metrics while Grafana supplies the
-operator dashboard. PostgreSQL remains the source of truth for customer-level
-usage and cost reporting.
+operator dashboard. The Compose environment provisions the scrape target,
+datasource, and starter dashboard automatically. PostgreSQL remains the source
+of truth for customer-level usage and cost reporting.
 
 ## Deferred architecture decisions
 

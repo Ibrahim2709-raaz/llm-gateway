@@ -141,8 +141,8 @@ The MVP is complete when all of the following are demonstrated:
 - [x] A request over its rate limit receives `429 Too Many Requests`.
 - [x] A request over its budget is rejected before a paid provider call.
 - [x] Successful provider calls store tokens, cost, latency, and status.
-- [ ] Prometheus exposes gateway and provider metrics.
-- [ ] Grafana shows traffic, latency, failures, fallback activity, and cost.
+- [x] Prometheus exposes gateway and provider metrics.
+- [x] Grafana shows traffic, latency, failures, fallback activity, and cost.
 - [ ] Logs can trace one request without revealing credentials.
 - [x] Automated tests cover authentication, routing, fallback, caching, rate
       limiting, and budget enforcement.

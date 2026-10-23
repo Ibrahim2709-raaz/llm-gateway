@@ -25,16 +25,19 @@ availability, and task complexity.
 
 ## Development status
 
-Steps 1 through 12 are complete: MVP planning, API contract design, the FastAPI
+Steps 1 through 13 are complete: MVP planning, API contract design, the FastAPI
 foundation, PostgreSQL/Redis infrastructure, the unified chat-completions API,
 the first real provider integration, API-key authentication, and distributed
 request rate limiting, intelligent provider routing, and resilient execution.
 The gateway also caches exact-match successful responses in Redis with strict
 customer isolation, reserves monthly budget before paid calls, and durably
-records actual tokens, cost, latency, provider, and model. The full
-production-ready project is now approximately 65% complete.
+records actual tokens, cost, latency, provider, and model. Prometheus now
+collects bounded operational metrics, and Grafana ships with a provisioned
+gateway dashboard. The full production-ready project is now approximately 75%
+complete.
 
-The next milestone adds Prometheus metrics and Grafana dashboards.
+The next milestone focuses on security and reliability hardening, including a
+provider circuit breaker.
 
 ## Project documentation
 
@@ -59,6 +62,7 @@ Open:
 - API documentation: <http://localhost:8000/docs>
 - Liveness: <http://localhost:8000/health/live>
 - Readiness: <http://localhost:8000/health/ready>
+- Prometheus metrics: <http://localhost:8000/metrics>
 
 Try the mock completion endpoint:
 
@@ -161,9 +165,19 @@ Alternatively, copy `.env.example` to `.env` and run:
 docker compose up --build
 ```
 
-The Compose stack starts the gateway, PostgreSQL, and Redis. The gateway waits
-for both dependencies to become healthy, applies Alembic migrations, and then
-starts FastAPI. To run PostgreSQL and Redis only while developing locally:
+The Compose stack starts the gateway, PostgreSQL, Redis, Prometheus, and
+Grafana. The gateway waits for both required data services to become healthy,
+applies Alembic migrations, and then starts FastAPI. Prometheus is available at
+<http://localhost:9090>; the provisioned **LLM Gateway Overview** dashboard is
+available in Grafana at <http://localhost:3000>. Anonymous access is enabled
+for this local development stack only.
+
+The dashboard displays request outcomes, P95 latency, provider errors, fallback
+activity, cache hit rate, rate-limit decisions, token throughput, and cost. Its
+metrics use bounded provider/model/outcome labels and never include customer
+IDs, request IDs, prompts, credentials, or response content.
+
+To run PostgreSQL and Redis only while developing locally:
 
 ```bash
 docker compose up -d postgres redis

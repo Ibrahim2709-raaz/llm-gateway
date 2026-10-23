@@ -118,11 +118,13 @@ async def test_service_reserves_and_settles_durable_usage() -> None:
     tracker.settle = AsyncMock()
     tracker.fail = AsyncMock()
     tracker.record_cached = AsyncMock()
+    metrics = Mock()
     clock_values = iter([10.0, 10.123])
     provider = SuccessfulProvider()
     service = ChatCompletionService(
         (provider,),
         usage_tracker=tracker,
+        metrics=metrics,
         clock=lambda: next(clock_values),
     )
     request_id = uuid4()
@@ -146,6 +148,9 @@ async def test_service_reserves_and_settles_durable_usage() -> None:
         latency_ms=123,
     )
     tracker.fail.assert_not_awaited()
+    metrics.record_provider_attempt.assert_called_once_with("successful", "successful-1", "success")
+    metrics.record_provider_usage.assert_called_once_with("successful", "successful-1", 10, 5, 0.25)
+    metrics.record_gateway_request.assert_called_once_with("success", 0.123)
 
 
 @pytest.mark.anyio
@@ -164,7 +169,8 @@ async def test_service_stops_before_provider_call_when_budget_is_exceeded() -> N
     tracker.settle = AsyncMock()
     tracker.fail = AsyncMock()
     tracker.record_cached = AsyncMock()
-    service = ChatCompletionService((provider,), usage_tracker=tracker)
+    metrics = Mock()
+    service = ChatCompletionService((provider,), usage_tracker=tracker, metrics=metrics)
 
     with pytest.raises(GatewayError) as captured:
         await service.create(make_request(), uuid4(), uuid4())
@@ -173,6 +179,7 @@ async def test_service_stops_before_provider_call_when_budget_is_exceeded() -> N
     provider.complete.assert_not_awaited()
     tracker.settle.assert_not_awaited()
     tracker.fail.assert_not_awaited()
+    metrics.record_gateway_request.assert_called_once_with("budget_rejected", 0)
 
 
 @pytest.mark.anyio

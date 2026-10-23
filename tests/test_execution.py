@@ -1,4 +1,5 @@
 from decimal import Decimal
+from unittest.mock import Mock
 from uuid import uuid4
 
 import pytest
@@ -102,10 +103,11 @@ async def test_executor_falls_back_after_primary_retries_are_exhausted() -> None
     primary = SequenceProvider("primary", [ProviderUnavailableError("down")])
     fallback = SequenceProvider("fallback", [result("fallback-1")])
     delays: list[float] = []
+    metrics = Mock()
 
-    execution = await executor(delays, max_retries=1).execute(
-        plan(primary, fallback), request(), uuid4()
-    )
+    fallback_executor = executor(delays, max_retries=1)
+    fallback_executor.metrics = metrics
+    execution = await fallback_executor.execute(plan(primary, fallback), request(), uuid4())
 
     assert primary.call_count == 2
     assert fallback.call_count == 1
@@ -120,6 +122,8 @@ async def test_executor_falls_back_after_primary_retries_are_exhausted() -> None
         "unavailable",
         "success",
     ]
+    metrics.record_fallback.assert_called_once_with("primary", "fallback")
+    assert metrics.record_provider_attempt.call_count == 3
 
 
 @pytest.mark.anyio

@@ -1,0 +1,99 @@
+{
+  "annotations": {"list": []},
+  "editable": true,
+  "graphTooltip": 1,
+  "panels": [
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "fieldConfig": {"defaults": {"unit": "short"}},
+      "gridPos": {"h": 5, "w": 6, "x": 0, "y": 0},
+      "id": 1,
+      "options": {"colorMode": "value", "graphMode": "area", "textMode": "auto"},
+      "targets": [{"expr": "sum(increase(llm_gateway_requests_total[$__range]))", "refId": "A"}],
+      "title": "Requests in range",
+      "type": "stat"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "fieldConfig": {"defaults": {"unit": "s"}},
+      "gridPos": {"h": 5, "w": 6, "x": 6, "y": 0},
+      "id": 2,
+      "options": {"colorMode": "value", "graphMode": "area", "textMode": "auto"},
+      "targets": [{"expr": "histogram_quantile(0.95, sum by (le) (rate(llm_gateway_request_duration_seconds_bucket[5m])))", "refId": "A"}],
+      "title": "P95 latency",
+      "type": "stat"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "fieldConfig": {"defaults": {"unit": "percentunit", "min": 0, "max": 1}},
+      "gridPos": {"h": 5, "w": 6, "x": 12, "y": 0},
+      "id": 3,
+      "options": {"colorMode": "value", "graphMode": "area", "textMode": "auto"},
+      "targets": [{"expr": "sum(rate(llm_gateway_cache_requests_total{result=\"hit\"}[5m])) / clamp_min(sum(rate(llm_gateway_cache_requests_total{result=~\"hit|miss\"}[5m])), 1e-9)", "refId": "A"}],
+      "title": "Cache hit rate",
+      "type": "stat"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "fieldConfig": {"defaults": {"unit": "currencyUSD"}},
+      "gridPos": {"h": 5, "w": 6, "x": 18, "y": 0},
+      "id": 4,
+      "options": {"colorMode": "value", "graphMode": "area", "textMode": "auto"},
+      "targets": [{"expr": "sum(increase(llm_gateway_cost_usd_total[$__range]))", "refId": "A"}],
+      "title": "Cost in range",
+      "type": "stat"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "fieldConfig": {"defaults": {"unit": "reqps"}},
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 5},
+      "id": 5,
+      "targets": [{"expr": "sum by (outcome) (rate(llm_gateway_requests_total[5m]))", "legendFormat": "{{outcome}}", "refId": "A"}],
+      "title": "Gateway request rate",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "fieldConfig": {"defaults": {"unit": "ops"}},
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 5},
+      "id": 6,
+      "targets": [{"expr": "sum by (provider, outcome) (rate(llm_gateway_provider_attempts_total[5m]))", "legendFormat": "{{provider}} / {{outcome}}", "refId": "A"}],
+      "title": "Provider attempts and failures",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "gridPos": {"h": 7, "w": 8, "x": 0, "y": 13},
+      "id": 7,
+      "targets": [{"expr": "sum by (from_provider, to_provider) (increase(llm_gateway_fallbacks_total[$__range]))", "legendFormat": "{{from_provider}} → {{to_provider}}", "refId": "A"}],
+      "title": "Fallback activity",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "fieldConfig": {"defaults": {"unit": "tps"}},
+      "gridPos": {"h": 7, "w": 8, "x": 8, "y": 13},
+      "id": 8,
+      "targets": [{"expr": "sum by (provider, model, type) (rate(llm_gateway_tokens_total[5m]))", "legendFormat": "{{provider}} / {{model}} / {{type}}", "refId": "A"}],
+      "title": "Token throughput",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "gridPos": {"h": 7, "w": 8, "x": 16, "y": 13},
+      "id": 9,
+      "targets": [{"expr": "sum by (decision) (rate(llm_gateway_rate_limit_decisions_total[5m]))", "legendFormat": "{{decision}}", "refId": "A"}],
+      "title": "Rate-limit decisions",
+      "type": "timeseries"
+    }
+  ],
+  "refresh": "15s",
+  "schemaVersion": 41,
+  "tags": ["llm", "gateway", "prometheus"],
+  "templating": {"list": []},
+  "time": {"from": "now-1h", "to": "now"},
+  "timezone": "browser",
+  "title": "LLM Gateway Overview",
+  "uid": "llm-gateway-overview",
+  "version": 1
+}

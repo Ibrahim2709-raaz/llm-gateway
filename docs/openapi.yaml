@@ -10,6 +10,7 @@ tags:
   - name: Chat
   - name: Usage
   - name: Health
+  - name: Observability
 paths:
   /v1/chat/completions:
     post:
@@ -125,6 +126,19 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ReadinessResponse"
+  /metrics:
+    get:
+      tags: [Observability]
+      operationId: getPrometheusMetrics
+      summary: Export bounded operational metrics for Prometheus
+      security: []
+      responses:
+        "200":
+          description: Prometheus text exposition format.
+          content:
+            text/plain:
+              schema:
+                type: string
 components:
   securitySchemes:
     bearerAuth:

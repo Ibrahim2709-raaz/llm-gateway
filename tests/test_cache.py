@@ -1,5 +1,5 @@
 from decimal import Decimal
-from unittest.mock import AsyncMock, Mock
+from unittest.mock import AsyncMock, Mock, call
 from uuid import UUID, uuid4
 
 import pytest
@@ -186,7 +186,10 @@ async def test_chat_service_returns_isolated_cache_hit_without_provider_call() -
     tracker.settle = AsyncMock()
     tracker.fail = AsyncMock()
     tracker.record_cached = AsyncMock()
-    service = ChatCompletionService((provider,), response_cache=cache, usage_tracker=tracker)
+    metrics = Mock()
+    service = ChatCompletionService(
+        (provider,), response_cache=cache, usage_tracker=tracker, metrics=metrics
+    )
     client_id = uuid4()
     first_request_id = uuid4()
     second_request_id = uuid4()
@@ -203,6 +206,8 @@ async def test_chat_service_returns_isolated_cache_hit_without_provider_call() -
     assert second.id != first.id
     assert second.choices == first.choices
     tracker.record_cached.assert_awaited_once_with(second_request_id, client_id)
+    assert metrics.record_cache_request.call_args_list[:2] == [call("miss"), call("hit")]
+    metrics.record_gateway_request.assert_any_call("cached", 0)
 
     await service.create(make_request(), uuid4(), uuid4())
     assert provider.call_count == 2

@@ -8,6 +8,7 @@ from app.auth.dependencies import AuthenticatedClient, authenticate_api_key
 from app.cache.service import RedisResponseCache
 from app.core.config import get_settings
 from app.db.session import get_database_session
+from app.observability.metrics import METRICS
 from app.rate_limits.dependencies import enforce_request_rate_limit
 from app.rate_limits.service import RateLimitStatus
 from app.schemas.chat import ChatCompletionRequest, ChatCompletionResponse
@@ -37,6 +38,7 @@ def get_chat_service(
         retry_max_delay_seconds=settings.provider_retry_max_delay_seconds,
         response_cache=response_cache,
         usage_tracker=DatabaseUsageService(session),
+        metrics=METRICS,
     )
 
 
