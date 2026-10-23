@@ -89,6 +89,9 @@ reproducible after a provider changes its pricing.
   both an explicit enable flag and a credential.
 - Provider SDK retries are disabled so retry and fallback behavior remains
   observable and controlled by the gateway execution layer.
+- A process-local circuit breaker isolates each provider/model pair. Open
+  circuits skip upstream calls, half-open state admits a single recovery probe,
+  and a successful probe restores normal execution.
 - Request limits use one atomic Redis script and customer-scoped keys. The
   gateway fails closed when Redis cannot make a safe limit decision.
 - Automatic routing uses rule-based task classification and immutable model

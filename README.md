@@ -33,11 +33,13 @@ The gateway also caches exact-match successful responses in Redis with strict
 customer isolation, reserves monthly budget before paid calls, and durably
 records actual tokens, cost, latency, provider, and model. Prometheus now
 collects bounded operational metrics, and Grafana ships with a provisioned
-gateway dashboard. The full production-ready project is now approximately 75%
+gateway dashboard. The full production-ready project is now approximately 80%
 complete.
 
-The next milestone focuses on security and reliability hardening, including a
-provider circuit breaker.
+Security and reliability hardening is now underway. The gateway includes a
+process-local provider circuit breaker that stops retrying an unhealthy model,
+routes immediately to the next candidate during the cooldown, and permits one
+half-open recovery probe before restoring normal traffic.
 
 ## Project documentation
 
@@ -87,6 +89,14 @@ default. Configure this with `REQUEST_RATE_LIMIT` and
 remaining, and reset headers; rejected requests return `429` and `Retry-After`.
 The gateway fails closed with `503 rate_limit_unavailable` if Redis cannot make
 a safe rate-limit decision.
+
+Retryable provider failures open the provider/model circuit after five
+consecutive failures by default. Configure the threshold and cooldown with
+`PROVIDER_CIRCUIT_BREAKER_FAILURE_THRESHOLD` and
+`PROVIDER_CIRCUIT_BREAKER_RECOVERY_SECONDS`. Requests skipped by an open circuit
+appear as `circuit_open` routing attempts and automatically fall back when
+another eligible provider is available. Circuit state is process-local, so a
+multi-replica deployment isolates failures independently in each replica.
 
 The mock provider is deterministic, costs `$0`, and requires no external API
 key. It exists to validate the gateway contract before real provider adapters

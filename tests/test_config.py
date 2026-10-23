@@ -23,6 +23,8 @@ def test_dependency_timeout_must_be_positive() -> None:
         ("request_rate_limit", 0),
         ("request_rate_limit_window_seconds", 0),
         ("response_cache_ttl_seconds", 0),
+        ("provider_circuit_breaker_failure_threshold", 0),
+        ("provider_circuit_breaker_recovery_seconds", 0),
     ],
 )
 def test_positive_runtime_settings(field: str, value: int) -> None:

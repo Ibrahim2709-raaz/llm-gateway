@@ -66,7 +66,14 @@ class RoutingAttempt(BaseModel):
 
     provider: str
     model: str
-    outcome: Literal["success", "timeout", "rate_limited", "unavailable", "error"]
+    outcome: Literal[
+        "success",
+        "timeout",
+        "rate_limited",
+        "unavailable",
+        "circuit_open",
+        "error",
+    ]
 
 
 class GatewayMetadata(BaseModel):

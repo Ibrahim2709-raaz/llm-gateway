@@ -6,8 +6,10 @@ from uuid import UUID
 
 import structlog
 
+from app.execution.circuit_breaker import ProviderCircuitBreaker
 from app.observability.metrics import MetricsRecorder
 from app.providers.base import (
+    ProviderCircuitOpenError,
     ProviderRateLimitError,
     ProviderRequestError,
     ProviderResult,
@@ -55,12 +57,14 @@ class ProviderExecutor:
         retry_max_delay_seconds: float,
         sleeper: Sleeper | None = None,
         metrics: MetricsRecorder | None = None,
+        circuit_breaker: ProviderCircuitBreaker | None = None,
     ) -> None:
         self.max_retries = max_retries
         self.retry_base_delay_seconds = retry_base_delay_seconds
         self.retry_max_delay_seconds = retry_max_delay_seconds
         self.sleeper = sleeper or asyncio.sleep
         self.metrics = metrics
+        self.circuit_breaker = circuit_breaker
 
     async def execute(
         self,
@@ -72,15 +76,42 @@ class ProviderExecutor:
         last_error: RetryableProviderError | None = None
         for candidate_index, candidate in enumerate(plan.candidates):
             provider = candidate.provider
+            provider_key = f"{provider.name}:{provider.model}"
             if candidate_index > 0 and self.metrics is not None:
                 self.metrics.record_fallback(
                     plan.candidates[candidate_index - 1].provider.name,
                     provider.name,
                 )
             for retry_index in range(self.max_retries + 1):
+                if (
+                    self.circuit_breaker is not None
+                    and not await self.circuit_breaker.allow_call(provider_key)
+                ):
+                    last_error = ProviderCircuitOpenError(
+                        f"The circuit for {provider.name}/{provider.model} is open"
+                    )
+                    self._record_attempt(provider.name, provider.model, "circuit_open")
+                    attempts.append(
+                        RoutingAttempt(
+                            provider=provider.name,
+                            model=provider.model,
+                            outcome="circuit_open",
+                        )
+                    )
+                    self._log_attempt(
+                        request_id,
+                        provider.name,
+                        provider.model,
+                        "circuit_open",
+                        retry_index,
+                        candidate_index,
+                    )
+                    break
                 try:
                     result = await provider.complete(request)
                 except ProviderRequestError:
+                    if self.circuit_breaker is not None:
+                        await self.circuit_breaker.record_success(provider_key)
                     self._record_attempt(provider.name, provider.model, "error")
                     self._log_attempt(
                         request_id,
@@ -114,10 +145,18 @@ class ProviderExecutor:
                         retry_index,
                         candidate_index,
                     )
+                    circuit_opened = (
+                        self.circuit_breaker is not None
+                        and await self.circuit_breaker.record_failure(provider_key)
+                    )
+                    if circuit_opened:
+                        break
                     if retry_index < self.max_retries:
                         await self.sleeper(self._retry_delay(retry_index))
                         continue
                     break
+                if self.circuit_breaker is not None:
+                    await self.circuit_breaker.record_success(provider_key)
                 attempts.append(
                     RoutingAttempt(
                         provider=provider.name,

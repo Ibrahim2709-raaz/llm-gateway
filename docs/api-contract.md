@@ -141,9 +141,11 @@ and estimated-cost ceiling. Provider request errors are treated as permanent:
 they return immediately and are never retried or fallen back.
 
 `gateway.attempts` preserves the execution order and reports only sanitized
-outcomes: `success`, `timeout`, `rate_limited`, `unavailable`, or `error`. If
-every eligible attempt times out, the gateway returns `504 provider_timeout`;
-other exhausted retryable routes return `502 provider_error`.
+outcomes: `success`, `timeout`, `rate_limited`, `unavailable`, `circuit_open`,
+or `error`. A `circuit_open` attempt means the provider/model was skipped during
+its recovery cooldown, without making an upstream call. If every eligible
+attempt times out, the gateway returns `504 provider_timeout`; other exhausted
+retryable routes return `502 provider_error`.
 
 ### Example response
 

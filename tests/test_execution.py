@@ -4,6 +4,7 @@ from uuid import uuid4
 
 import pytest
 
+from app.execution.circuit_breaker import ProviderCircuitBreaker
 from app.execution.service import ProviderExecutionExhausted, ProviderExecutor
 from app.providers.base import (
     ModelRoutingProfile,
@@ -162,3 +163,59 @@ async def test_exhausted_execution_distinguishes_mixed_failures() -> None:
 
     assert error.value.all_attempts_timed_out is False
     assert isinstance(error.value.last_error, ProviderUnavailableError)
+
+
+@pytest.mark.anyio
+async def test_open_circuit_skips_primary_and_falls_back() -> None:
+    now = [100.0]
+    breaker = ProviderCircuitBreaker(
+        failure_threshold=1,
+        recovery_seconds=30,
+        clock=lambda: now[0],
+    )
+    primary = SequenceProvider("primary", [ProviderUnavailableError("down")])
+    fallback = SequenceProvider("fallback", [result("fallback-1")])
+    circuit_executor = ProviderExecutor(
+        max_retries=2,
+        retry_base_delay_seconds=0,
+        retry_max_delay_seconds=0,
+        circuit_breaker=breaker,
+    )
+
+    first = await circuit_executor.execute(plan(primary, fallback), request(), uuid4())
+    second = await circuit_executor.execute(plan(primary, fallback), request(), uuid4())
+
+    assert first.candidate.provider is fallback
+    assert second.candidate.provider is fallback
+    assert primary.call_count == 1
+    assert [attempt.outcome for attempt in second.attempts] == ["circuit_open", "success"]
+
+
+@pytest.mark.anyio
+async def test_successful_half_open_probe_restores_primary() -> None:
+    now = [100.0]
+    breaker = ProviderCircuitBreaker(
+        failure_threshold=1,
+        recovery_seconds=30,
+        clock=lambda: now[0],
+    )
+    primary = SequenceProvider(
+        "primary",
+        [ProviderUnavailableError("down"), result("primary-1")],
+    )
+    fallback = SequenceProvider("fallback", [result("fallback-1")])
+    circuit_executor = ProviderExecutor(
+        max_retries=0,
+        retry_base_delay_seconds=0,
+        retry_max_delay_seconds=0,
+        circuit_breaker=breaker,
+    )
+
+    await circuit_executor.execute(plan(primary, fallback), request(), uuid4())
+    now[0] += 30
+    recovered = await circuit_executor.execute(plan(primary, fallback), request(), uuid4())
+    healthy = await circuit_executor.execute(plan(primary, fallback), request(), uuid4())
+
+    assert recovered.candidate.provider is primary
+    assert healthy.candidate.provider is primary
+    assert primary.call_count == 3

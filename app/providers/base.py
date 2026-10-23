@@ -48,6 +48,10 @@ class ProviderUnavailableError(ProviderError):
     """The provider could not serve the request."""
 
 
+class ProviderCircuitOpenError(ProviderUnavailableError):
+    """The provider was skipped because its circuit breaker is open."""
+
+
 class ChatProvider(Protocol):
     name: str
     model: str

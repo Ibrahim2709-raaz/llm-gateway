@@ -39,6 +39,7 @@ def get_chat_service(
         response_cache=response_cache,
         usage_tracker=DatabaseUsageService(session),
         metrics=METRICS,
+        circuit_breaker=request.app.state.resources.provider_circuit_breaker,
     )
 
 

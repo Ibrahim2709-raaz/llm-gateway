@@ -8,6 +8,7 @@ from fastapi import status
 
 from app.cache.service import ResponseCache
 from app.core.errors import GatewayError
+from app.execution.circuit_breaker import ProviderCircuitBreaker
 from app.execution.service import (
     ProviderExecutionExhausted,
     ProviderExecutor,
@@ -41,6 +42,7 @@ class ChatCompletionService:
         response_cache: ResponseCache | None = None,
         usage_tracker: UsageTracker | None = None,
         metrics: MetricsRecorder | None = None,
+        circuit_breaker: ProviderCircuitBreaker | None = None,
         clock: Callable[[], float] = time.perf_counter,
     ) -> None:
         self.router = ProviderRouter(providers)
@@ -50,6 +52,7 @@ class ChatCompletionService:
             retry_max_delay_seconds=retry_max_delay_seconds,
             sleeper=sleeper,
             metrics=metrics,
+            circuit_breaker=circuit_breaker,
         )
         self.response_cache = response_cache
         self.usage_tracker = usage_tracker

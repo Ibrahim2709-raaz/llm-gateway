@@ -5,6 +5,7 @@ from redis.asyncio import Redis
 from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 
 from app.core.config import Settings
+from app.execution.circuit_breaker import ProviderCircuitBreaker
 from app.providers.base import ChatProvider
 from app.providers.mock import MockProvider
 from app.providers.openai import OpenAIProvider
@@ -16,6 +17,7 @@ class AppResources:
     redis: Redis
     providers: tuple[ChatProvider, ...]
     openai_client: AsyncOpenAI | None
+    provider_circuit_breaker: ProviderCircuitBreaker
 
 
 def create_resources(settings: Settings) -> AppResources:
@@ -55,4 +57,8 @@ def create_resources(settings: Settings) -> AppResources:
         redis=redis,
         providers=tuple(providers),
         openai_client=openai_client,
+        provider_circuit_breaker=ProviderCircuitBreaker(
+            failure_threshold=settings.provider_circuit_breaker_failure_threshold,
+            recovery_seconds=settings.provider_circuit_breaker_recovery_seconds,
+        ),
     )

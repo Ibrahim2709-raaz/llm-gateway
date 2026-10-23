@@ -42,6 +42,8 @@ class Settings(BaseSettings):
     provider_max_retries: int = Field(default=2, ge=0, le=10)
     provider_retry_base_delay_seconds: float = Field(default=0.25, ge=0, le=30)
     provider_retry_max_delay_seconds: float = Field(default=2.0, ge=0, le=60)
+    provider_circuit_breaker_failure_threshold: int = Field(default=5, ge=1, le=100)
+    provider_circuit_breaker_recovery_seconds: float = Field(default=30.0, gt=0, le=3600)
 
     @model_validator(mode="after")
     def enabled_openai_requires_key(self) -> "Settings":

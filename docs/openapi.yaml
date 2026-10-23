@@ -287,7 +287,7 @@ components:
           type: string
         outcome:
           type: string
-          enum: [success, timeout, rate_limited, unavailable, error]
+          enum: [success, timeout, rate_limited, unavailable, circuit_open, error]
     GatewayMetadata:
       type: object
       additionalProperties: false
