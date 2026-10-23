@@ -301,6 +301,7 @@ All API errors use one envelope:
 | 402 | `budget_exceeded` | The estimated request would exceed the available budget. |
 | 403 | `model_not_allowed` | The customer cannot use the requested model or provider. |
 | 404 | `model_not_found` | The explicit model is unknown or disabled. |
+| 413 | `request_too_large` | The request body exceeds `MAX_REQUEST_BODY_BYTES`. |
 | 422 | `validation_error` | A field has the wrong type, range, or shape. |
 | 429 | `rate_limit_exceeded` | The customer's request limit is exhausted. |
 | 502 | `provider_error` | All attempts ended with non-timeout provider failures. |

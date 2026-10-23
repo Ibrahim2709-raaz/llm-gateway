@@ -64,7 +64,9 @@ def test_production_accepts_a_custom_api_key_pepper() -> None:
         _env_file=None,
         app_env="production",
         gateway_api_key_pepper="a-long-production-secret",
+        trusted_hosts="api.example.com,gateway",
     )
 
     assert settings.gateway_api_key_pepper.get_secret_value() == "a-long-production-secret"
     assert "a-long-production-secret" not in repr(settings)
+    assert settings.trusted_host_list == ["api.example.com", "gateway"]

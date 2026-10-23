@@ -30,6 +30,8 @@ class Settings(BaseSettings):
     request_rate_limit_window_seconds: int = Field(default=60, ge=1, le=86_400)
     response_cache_enabled: bool = True
     response_cache_ttl_seconds: int = Field(default=300, ge=1, le=86_400)
+    max_request_body_bytes: int = Field(default=1_048_576, ge=1_024, le=52_428_800)
+    trusted_hosts: str = "*"
     gateway_api_key_pepper: SecretStr = SecretStr(DEFAULT_DEVELOPMENT_API_KEY_PEPPER)
     openai_enabled: bool = False
     openai_api_key: SecretStr | None = None
@@ -62,7 +64,15 @@ class Settings(BaseSettings):
             and self.gateway_api_key_pepper.get_secret_value() == DEFAULT_DEVELOPMENT_API_KEY_PEPPER
         ):
             raise ValueError("GATEWAY_API_KEY_PEPPER must be changed in production")
+        if not self.trusted_host_list:
+            raise ValueError("TRUSTED_HOSTS must contain at least one host")
+        if self.app_env == "production" and "*" in self.trusted_host_list:
+            raise ValueError("TRUSTED_HOSTS must not contain '*' in production")
         return self
+
+    @property
+    def trusted_host_list(self) -> list[str]:
+        return [host.strip() for host in self.trusted_hosts.split(",") if host.strip()]
 
 
 @lru_cache

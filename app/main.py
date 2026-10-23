@@ -3,6 +3,7 @@ from contextlib import asynccontextmanager
 
 import structlog
 from fastapi import FastAPI
+from starlette.middleware.trustedhost import TrustedHostMiddleware
 
 from app.api.router import api_router
 from app.core.config import get_settings
@@ -10,6 +11,7 @@ from app.core.errors import register_exception_handlers
 from app.core.logging import configure_logging
 from app.core.resources import create_resources
 from app.middleware.request_id import RequestIdMiddleware
+from app.middleware.security import RequestBodyLimitMiddleware, SecurityHeadersMiddleware
 
 
 @asynccontextmanager
@@ -37,12 +39,24 @@ def create_app() -> FastAPI:
         title=settings.app_name,
         version=settings.app_version,
         description="Multi-provider LLM gateway",
-        docs_url="/docs",
-        redoc_url="/redoc",
-        openapi_url="/openapi.json",
+        docs_url="/docs" if settings.app_env != "production" else None,
+        redoc_url="/redoc" if settings.app_env != "production" else None,
+        openapi_url="/openapi.json" if settings.app_env != "production" else None,
         lifespan=lifespan,
     )
+    application.add_middleware(
+        RequestBodyLimitMiddleware,
+        max_body_bytes=settings.max_request_body_bytes,
+    )
+    application.add_middleware(
+        TrustedHostMiddleware,
+        allowed_hosts=settings.trusted_host_list,
+    )
     application.add_middleware(RequestIdMiddleware)
+    application.add_middleware(
+        SecurityHeadersMiddleware,
+        include_hsts=settings.app_env == "production",
+    )
     application.include_router(api_router)
     register_exception_handlers(application)
     return application

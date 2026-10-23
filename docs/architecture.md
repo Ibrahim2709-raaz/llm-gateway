@@ -83,6 +83,8 @@ reproducible after a provider changes its pricing.
 - Cache keys are isolated by customer unless a future policy explicitly permits
   shared caching.
 - API keys and provider credentials are never written to logs.
+- Production validates the HTTP Host header, hides interactive API docs, and
+  rejects request bodies above the configured memory-safety ceiling.
 - Provider prices are configuration data, not routing constants in source code.
 - The mock provider is a first-class adapter used by local development and tests.
 - Real providers are opt-in; the gateway never enables a paid provider without
