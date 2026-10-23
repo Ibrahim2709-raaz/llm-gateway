@@ -45,7 +45,7 @@ def generate_api_key(pepper: str) -> GeneratedApiKey:
     return GeneratedApiKey(token=token, prefix=prefix, digest=hash_api_key(token, pepper))
 
 
-def create_client_api_key(
+async def create_client_api_key(
     session: AsyncSession,
     *,
     client_name: str,
@@ -60,16 +60,15 @@ def create_client_api_key(
     generated = generate_api_key(pepper)
     client_id = uuid4()
     api_key_id = uuid4()
-    session.add_all(
-        [
-            Client(id=client_id, name=normalized_client_name, status="active"),
-            ApiKey(
-                id=api_key_id,
-                client_id=client_id,
-                name=normalized_key_name,
-                key_prefix=generated.prefix,
-                key_hash=generated.digest,
-            ),
-        ]
+    session.add(Client(id=client_id, name=normalized_client_name, status="active"))
+    await session.flush()
+    session.add(
+        ApiKey(
+            id=api_key_id,
+            client_id=client_id,
+            name=normalized_key_name,
+            key_prefix=generated.prefix,
+            key_hash=generated.digest,
+        )
     )
     return CreatedClientApiKey(client_id=client_id, api_key_id=api_key_id, token=generated.token)

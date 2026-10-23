@@ -1,4 +1,4 @@
-from unittest.mock import AsyncMock, Mock
+from unittest.mock import AsyncMock, Mock, call
 from uuid import uuid4
 
 import pytest
@@ -37,17 +37,19 @@ def test_invalid_api_key_shape_has_no_prefix(token: str) -> None:
     assert get_api_key_prefix(token) is None
 
 
-def test_create_client_api_key_stores_only_a_digest() -> None:
-    session = Mock(spec=AsyncSession)
+@pytest.mark.anyio
+async def test_create_client_api_key_stores_only_a_digest() -> None:
+    session = AsyncMock(spec=AsyncSession)
 
-    created = create_client_api_key(
+    created = await create_client_api_key(
         session,
         client_name="  Example Client  ",
         key_name="  production  ",
         pepper="test-pepper",
     )
 
-    stored_client, stored_key = session.add_all.call_args.args[0]
+    stored_client = session.add.call_args_list[0].args[0]
+    stored_key = session.add.call_args_list[1].args[0]
     assert isinstance(stored_client, Client)
     assert isinstance(stored_key, ApiKey)
     assert stored_client.id == created.client_id
@@ -57,14 +59,21 @@ def test_create_client_api_key_stores_only_a_digest() -> None:
     assert stored_key.key_prefix == created.token[:16]
     assert stored_key.key_hash == hash_api_key(created.token, "test-pepper")
     assert created.token != stored_key.key_hash
+    session.flush.assert_awaited_once()
+    assert session.method_calls[:3] == [
+        call.add(stored_client),
+        call.flush(),
+        call.add(stored_key),
+    ]
 
 
 @pytest.mark.parametrize(("client_name", "key_name"), [("", "key"), ("client", "  ")])
-def test_create_client_api_key_rejects_empty_names(client_name: str, key_name: str) -> None:
-    session = Mock(spec=AsyncSession)
+@pytest.mark.anyio
+async def test_create_client_api_key_rejects_empty_names(client_name: str, key_name: str) -> None:
+    session = AsyncMock(spec=AsyncSession)
 
     with pytest.raises(ValueError, match="must not be empty"):
-        create_client_api_key(
+        await create_client_api_key(
             session,
             client_name=client_name,
             key_name=key_name,

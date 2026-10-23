@@ -21,7 +21,7 @@ async def create_key(client_name: str, key_name: str) -> CreatedClientApiKey:
     factory = session_factory(engine)
     try:
         async with factory.begin() as session:
-            created = create_client_api_key(
+            created = await create_client_api_key(
                 session,
                 client_name=client_name,
                 key_name=key_name,
