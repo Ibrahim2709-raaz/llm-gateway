@@ -41,6 +41,14 @@ class Settings(BaseSettings):
     openai_output_cost_per_million_usd: float = Field(default=12.0, ge=0)
     openai_estimated_latency_ms: int = Field(default=1500, ge=1)
     openai_quality_score: float = Field(default=0.9, ge=0, le=1)
+    anthropic_enabled: bool = False
+    anthropic_api_key: SecretStr | None = None
+    anthropic_model: str = Field(default="claude-sonnet-5-5", min_length=1)
+    anthropic_timeout_seconds: float = Field(default=30.0, gt=0, le=600)
+    anthropic_input_cost_per_million_usd: float = Field(default=2.0, ge=0)
+    anthropic_output_cost_per_million_usd: float = Field(default=10.0, ge=0)
+    anthropic_estimated_latency_ms: int = Field(default=1800, ge=1)
+    anthropic_quality_score: float = Field(default=0.92, ge=0, le=1)
     provider_max_retries: int = Field(default=2, ge=0, le=10)
     provider_retry_base_delay_seconds: float = Field(default=0.25, ge=0, le=30)
     provider_retry_max_delay_seconds: float = Field(default=2.0, ge=0, le=60)
@@ -54,6 +62,12 @@ class Settings(BaseSettings):
         )
         if self.openai_enabled and missing_key:
             raise ValueError("OPENAI_API_KEY is required when OPENAI_ENABLED is true")
+        missing_anthropic_key = (
+            self.anthropic_api_key is None
+            or not self.anthropic_api_key.get_secret_value().strip()
+        )
+        if self.anthropic_enabled and missing_anthropic_key:
+            raise ValueError("ANTHROPIC_API_KEY is required when ANTHROPIC_ENABLED is true")
         if self.provider_retry_max_delay_seconds < self.provider_retry_base_delay_seconds:
             raise ValueError(
                 "PROVIDER_RETRY_MAX_DELAY_SECONDS must be greater than or equal to "

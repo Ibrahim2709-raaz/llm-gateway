@@ -26,6 +26,8 @@ async def lifespan(application: FastAPI) -> AsyncIterator[None]:
     finally:
         if resources.openai_client is not None:
             await resources.openai_client.close()
+        if resources.anthropic_client is not None:
+            await resources.anthropic_client.close()
         await resources.redis.aclose()
         await resources.database_engine.dispose()
         logger.info("gateway_stopped")

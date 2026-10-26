@@ -28,12 +28,12 @@ availability, and task complexity.
 ## Development status
 
 Development stages 1 through 11 are complete, and stage 12 (deployment and
-documentation) is underway. The gateway implements the unified API, OpenAI and
-mock providers, API-key authentication, distributed rate limiting, intelligent
-routing, retries and fallback, response caching, usage budgets, cost tracking,
-Prometheus metrics, a provisioned Grafana dashboard, and production-oriented
-API hardening. The full production-ready project is now approximately 90%
-complete.
+documentation) is underway. The gateway implements the unified API, OpenAI,
+Anthropic, and mock providers, API-key authentication, distributed rate
+limiting, intelligent routing, retries and fallback, response caching, usage
+budgets, cost tracking, Prometheus metrics, a provisioned Grafana dashboard,
+and production-oriented API hardening. The full production-ready project is
+now approximately 93% complete.
 
 The reliability layer includes a process-local provider circuit breaker that
 stops retrying an unhealthy model, routes immediately to the next candidate
@@ -44,8 +44,9 @@ documentation in production.
 
 GitHub Actions now validates every pull request and every push to `main` by
 running Ruff, mypy, the full coverage-enforced pytest suite, and a Docker image
-build. The remaining release work is provider breadth, clean-checkout/end-to-end
-validation, and final deployment documentation.
+build. The remaining release work is a generic local OpenAI-compatible
+provider, clean-checkout/end-to-end validation, and final deployment
+documentation.
 
 ## Project documentation
 
@@ -137,12 +138,36 @@ and remain configurable through environment variables.
 Until structured tool calling is implemented, incoming `tool` messages are
 sent to OpenAI as clearly labelled user text.
 
+### Enable Anthropic
+
+Anthropic is also opt-in. Set these values in `.env`:
+
+```dotenv
+ANTHROPIC_ENABLED=true
+ANTHROPIC_API_KEY=your-anthropic-api-key
+ANTHROPIC_MODEL=claude-sonnet-5-5
+```
+
+The default routing profile uses `$2` per million input tokens and `$10` per
+million output tokens. All model, pricing, latency, and quality values remain
+configurable through environment variables. These defaults follow Anthropic's
+[model documentation](https://platform.claude.com/docs/en/models/overview) and
+[pricing](https://platform.claude.com/docs/en/about-claude/pricing). The SDK's
+retries are disabled so the gateway's retry, circuit-breaker, and fallback
+layers remain authoritative.
+
+System messages are combined into Anthropic's top-level system instruction,
+and tool-result messages are sent as clearly labelled user text until native
+tool calling is implemented. The adapter omits `temperature` because current
+Claude models reject non-default sampling parameters; explicit assistant
+prefills are rejected as unsupported instead of being silently changed.
+
 With `model: "auto"`, the router classifies the request as simple, medium, or
-complex, filters candidates by provider allowlist, capability, and
-`max_cost_usd`, then applies the requested `balanced`, `cost`, `latency`, or
-`quality` strategy. The mock adapter is excluded from automatic selection when
-a real provider is available, but remains the local fallback and can always be
-selected explicitly.
+complex, filters enabled OpenAI and Anthropic candidates by provider allowlist,
+capability, and `max_cost_usd`, then applies the requested `balanced`, `cost`,
+`latency`, or `quality` strategy. The mock adapter is excluded from automatic
+selection when a real provider is available, but remains the local fallback
+and can always be selected explicitly.
 
 Temporary timeouts, provider rate limits, and availability failures are retried
 before the gateway advances to the next ranked candidate. Configure retry

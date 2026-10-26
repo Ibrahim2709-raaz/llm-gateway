@@ -54,6 +54,23 @@ def test_openai_can_be_enabled_with_a_secret_key() -> None:
     assert "test-key" not in repr(settings)
 
 
+def test_anthropic_requires_a_nonempty_key_when_enabled() -> None:
+    with pytest.raises(ValidationError):
+        Settings(_env_file=None, anthropic_enabled=True, anthropic_api_key="")
+
+
+def test_anthropic_can_be_enabled_with_a_secret_key() -> None:
+    settings = Settings(
+        _env_file=None,
+        anthropic_enabled=True,
+        anthropic_api_key="test-anthropic-key",
+    )
+
+    assert settings.anthropic_api_key is not None
+    assert settings.anthropic_api_key.get_secret_value() == "test-anthropic-key"
+    assert "test-anthropic-key" not in repr(settings)
+
+
 def test_production_requires_a_custom_api_key_pepper() -> None:
     with pytest.raises(ValidationError, match="GATEWAY_API_KEY_PEPPER"):
         Settings(_env_file=None, app_env="production")

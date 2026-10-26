@@ -1,11 +1,13 @@
 from dataclasses import dataclass
 
+from anthropic import AsyncAnthropic
 from openai import AsyncOpenAI
 from redis.asyncio import Redis
 from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 
 from app.core.config import Settings
 from app.execution.circuit_breaker import ProviderCircuitBreaker
+from app.providers.anthropic import AnthropicProvider
 from app.providers.base import ChatProvider
 from app.providers.mock import MockProvider
 from app.providers.openai import OpenAIProvider
@@ -17,6 +19,7 @@ class AppResources:
     redis: Redis
     providers: tuple[ChatProvider, ...]
     openai_client: AsyncOpenAI | None
+    anthropic_client: AsyncAnthropic | None
     provider_circuit_breaker: ProviderCircuitBreaker
 
 
@@ -34,6 +37,7 @@ def create_resources(settings: Settings) -> AppResources:
         socket_timeout=settings.dependency_check_timeout_seconds,
     )
     openai_client: AsyncOpenAI | None = None
+    anthropic_client: AsyncAnthropic | None = None
     providers: list[ChatProvider] = []
     if settings.openai_enabled and settings.openai_api_key is not None:
         openai_client = AsyncOpenAI(
@@ -51,12 +55,33 @@ def create_resources(settings: Settings) -> AppResources:
                 quality_score=settings.openai_quality_score,
             )
         )
+    if settings.anthropic_enabled and settings.anthropic_api_key is not None:
+        anthropic_client = AsyncAnthropic(
+            api_key=settings.anthropic_api_key.get_secret_value(),
+            timeout=settings.anthropic_timeout_seconds,
+            max_retries=0,
+        )
+        providers.append(
+            AnthropicProvider(
+                anthropic_client,
+                model=settings.anthropic_model,
+                input_cost_per_million_usd=(
+                    settings.anthropic_input_cost_per_million_usd
+                ),
+                output_cost_per_million_usd=(
+                    settings.anthropic_output_cost_per_million_usd
+                ),
+                estimated_latency_ms=settings.anthropic_estimated_latency_ms,
+                quality_score=settings.anthropic_quality_score,
+            )
+        )
     providers.append(MockProvider())
     return AppResources(
         database_engine=engine,
         redis=redis,
         providers=tuple(providers),
         openai_client=openai_client,
+        anthropic_client=anthropic_client,
         provider_circuit_breaker=ProviderCircuitBreaker(
             failure_threshold=settings.provider_circuit_breaker_failure_threshold,
             recovery_seconds=settings.provider_circuit_breaker_recovery_seconds,

@@ -115,7 +115,9 @@ Authorization: Bearer gw_live_example
   for the authenticated customer.
 - `messages` must contain at least one message and cannot exceed the configured
   request-size limit.
-- `temperature` is between `0` and `2`.
+- `temperature` is between `0` and `2`. An adapter may omit it when the selected
+  provider/model does not support sampling parameters; the Anthropic adapter
+  does this for current Claude models.
 - `max_tokens` is between `1` and `32768`, subject to the selected model's
   context limit.
 - `stream` must be `false` in the MVP.
@@ -154,7 +156,7 @@ retryable routes return `502 provider_error`.
   "id": "chatcmpl_01jexample",
   "object": "chat.completion",
   "created": 1790707200,
-  "model": "claude-sonnet",
+  "model": "claude-sonnet-5-5",
   "choices": [
     {
       "index": 0,
@@ -181,17 +183,17 @@ retryable routes return `502 provider_error`.
     "attempts": [
       {
         "provider": "openai",
-        "model": "gpt-4.1-mini",
+        "model": "gpt-5.6-terra",
         "outcome": "timeout"
       },
       {
         "provider": "openai",
-        "model": "gpt-4.1-mini",
+        "model": "gpt-5.6-terra",
         "outcome": "timeout"
       },
       {
         "provider": "anthropic",
-        "model": "claude-sonnet",
+        "model": "claude-sonnet-5-5",
         "outcome": "success"
       }
     ]
