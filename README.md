@@ -29,11 +29,11 @@ availability, and task complexity.
 
 Development stages 1 through 11 are complete, and stage 12 (deployment and
 documentation) is underway. The gateway implements the unified API, OpenAI,
-Anthropic, and mock providers, API-key authentication, distributed rate
-limiting, intelligent routing, retries and fallback, response caching, usage
-budgets, cost tracking, Prometheus metrics, a provisioned Grafana dashboard,
-and production-oriented API hardening. The full production-ready project is
-now approximately 93% complete.
+Anthropic, local OpenAI-compatible, and mock providers, API-key authentication,
+distributed rate limiting, intelligent routing, retries and fallback, response
+caching, usage budgets, cost tracking, Prometheus metrics, a provisioned
+Grafana dashboard, and production-oriented API hardening. The full
+production-ready project is now approximately 96% complete.
 
 The reliability layer includes a process-local provider circuit breaker that
 stops retrying an unhealthy model, routes immediately to the next candidate
@@ -44,9 +44,8 @@ documentation in production.
 
 GitHub Actions now validates every pull request and every push to `main` by
 running Ruff, mypy, the full coverage-enforced pytest suite, and a Docker image
-build. The remaining release work is a generic local OpenAI-compatible
-provider, clean-checkout/end-to-end validation, and final deployment
-documentation.
+build. The remaining release work is clean-checkout/end-to-end validation and
+final deployment documentation.
 
 ## Project documentation
 
@@ -113,8 +112,7 @@ the development API-key pepper. Production also disables `/docs`, `/redoc`, and
 and no-store response headers.
 
 The mock provider is deterministic, costs `$0`, and requires no external API
-key. It exists to validate the gateway contract before real provider adapters
-are added.
+key. It exists to validate the gateway contract without external credentials.
 
 ### Enable OpenAI
 
@@ -162,12 +160,46 @@ tool calling is implemented. The adapter omits `temperature` because current
 Claude models reject non-default sampling parameters; explicit assistant
 prefills are rejected as unsupported instead of being silently changed.
 
+### Enable a local model
+
+The `local` provider uses the OpenAI-compatible Chat Completions API supported
+by [Ollama](https://docs.ollama.com/api/openai-compatibility) and
+[vLLM](https://docs.vllm.ai/en/latest/serving/openai_compatible_server/). For
+example, start an Ollama model on the host:
+
+```bash
+ollama pull qwen3:8b
+ollama serve
+```
+
+When running the gateway directly on the host, set:
+
+```dotenv
+LOCAL_ENABLED=true
+LOCAL_BASE_URL=http://localhost:11434/v1
+LOCAL_API_KEY=ollama
+LOCAL_MODEL=qwen3:8b
+```
+
+When the gateway runs in Docker Compose but Ollama runs on the host, use
+`LOCAL_BASE_URL=http://host.docker.internal:11434/v1`. Compose provisions that
+host mapping. Ollama requires an API-key value in the OpenAI client but ignores
+it for its local server; replace `LOCAL_API_KEY` with the configured credential
+when using an authenticated vLLM or other compatible endpoint.
+
+Local token prices default to `$0` because there is no upstream per-token bill.
+Set `LOCAL_INPUT_COST_PER_MILLION_USD` and
+`LOCAL_OUTPUT_COST_PER_MILLION_USD` if you want routing and budgets to account
+for allocated infrastructure cost. Electricity and hardware depreciation are
+not estimated automatically.
+
 With `model: "auto"`, the router classifies the request as simple, medium, or
-complex, filters enabled OpenAI and Anthropic candidates by provider allowlist,
-capability, and `max_cost_usd`, then applies the requested `balanced`, `cost`,
-`latency`, or `quality` strategy. The mock adapter is excluded from automatic
-selection when a real provider is available, but remains the local fallback
-and can always be selected explicitly.
+complex, filters enabled OpenAI, Anthropic, and local candidates by provider
+allowlist, capability, and `max_cost_usd`, then applies the requested
+`balanced`, `cost`, `latency`, or `quality` strategy. The mock adapter is
+excluded from automatic selection when a real provider is available, but
+remains the deterministic development fallback and can always be selected
+explicitly.
 
 Temporary timeouts, provider rate limits, and availability failures are retried
 before the gateway advances to the next ranked candidate. Configure retry

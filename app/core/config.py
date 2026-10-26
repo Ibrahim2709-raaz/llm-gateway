@@ -1,7 +1,7 @@
 from functools import lru_cache
 from typing import Literal
 
-from pydantic import Field, SecretStr, model_validator
+from pydantic import AnyHttpUrl, Field, SecretStr, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 DEFAULT_DEVELOPMENT_API_KEY_PEPPER = "development-only-change-me"
@@ -49,6 +49,15 @@ class Settings(BaseSettings):
     anthropic_output_cost_per_million_usd: float = Field(default=10.0, ge=0)
     anthropic_estimated_latency_ms: int = Field(default=1800, ge=1)
     anthropic_quality_score: float = Field(default=0.92, ge=0, le=1)
+    local_enabled: bool = False
+    local_base_url: AnyHttpUrl = AnyHttpUrl("http://localhost:11434/v1")
+    local_api_key: SecretStr = SecretStr("ollama")
+    local_model: str = Field(default="qwen3:8b", min_length=1)
+    local_timeout_seconds: float = Field(default=60.0, gt=0, le=600)
+    local_input_cost_per_million_usd: float = Field(default=0.0, ge=0)
+    local_output_cost_per_million_usd: float = Field(default=0.0, ge=0)
+    local_estimated_latency_ms: int = Field(default=2500, ge=1)
+    local_quality_score: float = Field(default=0.7, ge=0, le=1)
     provider_max_retries: int = Field(default=2, ge=0, le=10)
     provider_retry_base_delay_seconds: float = Field(default=0.25, ge=0, le=30)
     provider_retry_max_delay_seconds: float = Field(default=2.0, ge=0, le=60)
@@ -68,6 +77,8 @@ class Settings(BaseSettings):
         )
         if self.anthropic_enabled and missing_anthropic_key:
             raise ValueError("ANTHROPIC_API_KEY is required when ANTHROPIC_ENABLED is true")
+        if self.local_enabled and not self.local_api_key.get_secret_value().strip():
+            raise ValueError("LOCAL_API_KEY must not be empty when LOCAL_ENABLED is true")
         if self.provider_retry_max_delay_seconds < self.provider_retry_base_delay_seconds:
             raise ValueError(
                 "PROVIDER_RETRY_MAX_DELAY_SECONDS must be greater than or equal to "

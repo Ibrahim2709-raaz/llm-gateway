@@ -9,6 +9,7 @@ from app.core.config import Settings
 from app.execution.circuit_breaker import ProviderCircuitBreaker
 from app.providers.anthropic import AnthropicProvider
 from app.providers.base import ChatProvider
+from app.providers.local import LocalOpenAIProvider
 from app.providers.mock import MockProvider
 from app.providers.openai import OpenAIProvider
 
@@ -20,6 +21,7 @@ class AppResources:
     providers: tuple[ChatProvider, ...]
     openai_client: AsyncOpenAI | None
     anthropic_client: AsyncAnthropic | None
+    local_client: AsyncOpenAI | None
     provider_circuit_breaker: ProviderCircuitBreaker
 
 
@@ -38,6 +40,7 @@ def create_resources(settings: Settings) -> AppResources:
     )
     openai_client: AsyncOpenAI | None = None
     anthropic_client: AsyncAnthropic | None = None
+    local_client: AsyncOpenAI | None = None
     providers: list[ChatProvider] = []
     if settings.openai_enabled and settings.openai_api_key is not None:
         openai_client = AsyncOpenAI(
@@ -75,6 +78,23 @@ def create_resources(settings: Settings) -> AppResources:
                 quality_score=settings.anthropic_quality_score,
             )
         )
+    if settings.local_enabled:
+        local_client = AsyncOpenAI(
+            base_url=str(settings.local_base_url),
+            api_key=settings.local_api_key.get_secret_value(),
+            timeout=settings.local_timeout_seconds,
+            max_retries=0,
+        )
+        providers.append(
+            LocalOpenAIProvider(
+                local_client,
+                model=settings.local_model,
+                input_cost_per_million_usd=settings.local_input_cost_per_million_usd,
+                output_cost_per_million_usd=settings.local_output_cost_per_million_usd,
+                estimated_latency_ms=settings.local_estimated_latency_ms,
+                quality_score=settings.local_quality_score,
+            )
+        )
     providers.append(MockProvider())
     return AppResources(
         database_engine=engine,
@@ -82,6 +102,7 @@ def create_resources(settings: Settings) -> AppResources:
         providers=tuple(providers),
         openai_client=openai_client,
         anthropic_client=anthropic_client,
+        local_client=local_client,
         provider_circuit_breaker=ProviderCircuitBreaker(
             failure_threshold=settings.provider_circuit_breaker_failure_threshold,
             recovery_seconds=settings.provider_circuit_breaker_recovery_seconds,

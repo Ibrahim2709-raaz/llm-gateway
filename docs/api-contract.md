@@ -117,7 +117,8 @@ Authorization: Bearer gw_live_example
   request-size limit.
 - `temperature` is between `0` and `2`. An adapter may omit it when the selected
   provider/model does not support sampling parameters; the Anthropic adapter
-  does this for current Claude models.
+  does this for current Claude models. The OpenAI and local OpenAI-compatible
+  adapters forward it.
 - `max_tokens` is between `1` and `32768`, subject to the selected model's
   context limit.
 - `stream` must be `false` in the MVP.

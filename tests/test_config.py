@@ -71,6 +71,26 @@ def test_anthropic_can_be_enabled_with_a_secret_key() -> None:
     assert "test-anthropic-key" not in repr(settings)
 
 
+def test_local_provider_defaults_to_ollama_compatible_endpoint() -> None:
+    settings = Settings(_env_file=None)
+
+    assert str(settings.local_base_url) == "http://localhost:11434/v1"
+    assert settings.local_model == "qwen3:8b"
+    assert settings.local_input_cost_per_million_usd == 0
+    assert settings.local_output_cost_per_million_usd == 0
+    assert "ollama" not in repr(settings)
+
+
+def test_local_provider_requires_valid_http_url() -> None:
+    with pytest.raises(ValidationError):
+        Settings(_env_file=None, local_base_url="localhost:11434/v1")
+
+
+def test_local_provider_requires_nonempty_key_when_enabled() -> None:
+    with pytest.raises(ValidationError, match="LOCAL_API_KEY"):
+        Settings(_env_file=None, local_enabled=True, local_api_key="")
+
+
 def test_production_requires_a_custom_api_key_pepper() -> None:
     with pytest.raises(ValidationError, match="GATEWAY_API_KEY_PEPPER"):
         Settings(_env_file=None, app_env="production")
