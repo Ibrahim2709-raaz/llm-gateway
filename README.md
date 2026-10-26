@@ -1,5 +1,7 @@
 # LLM Gateway
 
+[![CI](https://github.com/Ibrahim2709-raaz/llm-gateway/actions/workflows/ci.yml/badge.svg)](https://github.com/Ibrahim2709-raaz/llm-gateway/actions/workflows/ci.yml)
+
 A multi-provider LLM API gateway that routes requests according to cost, latency,
 availability, and task complexity.
 
@@ -25,23 +27,25 @@ availability, and task complexity.
 
 ## Development status
 
-Steps 1 through 13 are complete: MVP planning, API contract design, the FastAPI
-foundation, PostgreSQL/Redis infrastructure, the unified chat-completions API,
-the first real provider integration, API-key authentication, and distributed
-request rate limiting, intelligent provider routing, and resilient execution.
-The gateway also caches exact-match successful responses in Redis with strict
-customer isolation, reserves monthly budget before paid calls, and durably
-records actual tokens, cost, latency, provider, and model. Prometheus now
-collects bounded operational metrics, and Grafana ships with a provisioned
-gateway dashboard. The full production-ready project is now approximately 85%
+Development stages 1 through 11 are complete, and stage 12 (deployment and
+documentation) is underway. The gateway implements the unified API, OpenAI and
+mock providers, API-key authentication, distributed rate limiting, intelligent
+routing, retries and fallback, response caching, usage budgets, cost tracking,
+Prometheus metrics, a provisioned Grafana dashboard, and production-oriented
+API hardening. The full production-ready project is now approximately 90%
 complete.
 
-Security and reliability hardening is now underway. The gateway includes a
-process-local provider circuit breaker that stops retrying an unhealthy model,
-routes immediately to the next candidate during the cooldown, and permits one
-half-open recovery probe before restoring normal traffic. It also enforces a
-request-body ceiling, adds defensive response headers, validates trusted hosts,
-and disables interactive API documentation in production.
+The reliability layer includes a process-local provider circuit breaker that
+stops retrying an unhealthy model, routes immediately to the next candidate
+during the cooldown, and permits one half-open recovery probe before restoring
+normal traffic. The API also enforces a request-body ceiling, adds defensive
+response headers, validates trusted hosts, and disables interactive API
+documentation in production.
+
+GitHub Actions now validates every pull request and every push to `main` by
+running Ruff, mypy, the full coverage-enforced pytest suite, and a Docker image
+build. The remaining release work is provider breadth, clean-checkout/end-to-end
+validation, and final deployment documentation.
 
 ## Project documentation
 
@@ -177,6 +181,11 @@ ruff check .
 mypy app
 pytest --cov=app
 ```
+
+The same checks run automatically in the repository's
+[GitHub Actions workflow](.github/workflows/ci.yml), followed by a clean Docker
+image build. The workflow has read-only repository permissions and cancels
+superseded runs on the same branch.
 
 Alternatively, copy `.env.example` to `.env` and run:
 
