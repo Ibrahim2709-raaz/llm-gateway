@@ -35,7 +35,9 @@ def format_inspection(inspection: FoundationInspection) -> str:
         lines.extend(
             (
                 f"  - {policy.version} [{policy.status}] "
-                f"classifier={policy.classifier_version} scores={policy.score_version}"
+                f"classifier={policy.classifier_version} scores={policy.score_version} "
+                f"minimum_samples={policy.minimum_sample_count} "
+                f"cold_start={policy.cold_start_mode}"
             )
             for policy in inspection.policies
         )

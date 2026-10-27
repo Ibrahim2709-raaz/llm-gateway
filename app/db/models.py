@@ -18,6 +18,7 @@ from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base, TimestampMixin, UUIDPrimaryKeyMixin
 from app.routing.taxonomy import (
+    COLD_START_MODES,
     EVALUATION_RUN_STATUSES,
     TASK_CATEGORIES,
     TASK_DIFFICULTIES,
@@ -215,8 +216,10 @@ class ModelCapabilityScore(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     quality_score: Mapped[Decimal] = mapped_column(Numeric(8, 6), nullable=False)
     sample_count: Mapped[int] = mapped_column(Integer, nullable=False)
     score_variance: Mapped[Decimal | None] = mapped_column(Numeric(12, 8))
+    capabilities: Mapped[list[str]] = mapped_column(JSON, default=list, nullable=False)
     status: Mapped[str] = mapped_column(String(32), default="draft", nullable=False, index=True)
     valid_from: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    valid_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
 
 class RoutingPolicyVersion(UUIDPrimaryKeyMixin, TimestampMixin, Base):
@@ -227,6 +230,14 @@ class RoutingPolicyVersion(UUIDPrimaryKeyMixin, TimestampMixin, Base):
             f"status IN ({_sql_values(VERSION_STATUSES)})",
             name="routing_policy_version_status",
         ),
+        CheckConstraint(
+            f"cold_start_mode IN ({_sql_values(COLD_START_MODES)})",
+            name="routing_policy_cold_start_mode",
+        ),
+        CheckConstraint(
+            "minimum_sample_count > 0",
+            name="routing_policy_minimum_sample_count",
+        ),
     )
 
     version: Mapped[str] = mapped_column(String(64), nullable=False)
@@ -235,6 +246,10 @@ class RoutingPolicyVersion(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     score_version: Mapped[str] = mapped_column(String(64), nullable=False)
     strategy_weights: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict, nullable=False)
     minimum_quality: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict, nullable=False)
+    minimum_sample_count: Mapped[int] = mapped_column(Integer, default=5, nullable=False)
+    cold_start_mode: Mapped[str] = mapped_column(
+        String(32), default="static_profile", nullable=False
+    )
     activated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
 

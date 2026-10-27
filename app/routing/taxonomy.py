@@ -35,8 +35,15 @@ class EvaluationRunStatus(StrEnum):
     FAILED = "failed"
 
 
+class ColdStartMode(StrEnum):
+    STATIC_PROFILE = "static_profile"
+    EXCLUDE = "exclude"
+    EXPLICIT_ONLY = "explicit_only"
+
+
 TASK_CATEGORIES = tuple(category.value for category in TaskCategory)
 TASK_DIFFICULTIES = tuple(difficulty.value for difficulty in TaskDifficulty)
 MODEL_CAPABILITIES = tuple(capability.value for capability in ModelCapability)
 VERSION_STATUSES = tuple(status.value for status in VersionStatus)
 EVALUATION_RUN_STATUSES = tuple(status.value for status in EvaluationRunStatus)
+COLD_START_MODES = tuple(mode.value for mode in ColdStartMode)

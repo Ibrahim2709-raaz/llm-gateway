@@ -61,6 +61,8 @@ def test_capability_scores_are_versioned_by_task_and_difficulty() -> None:
         "difficulty",
         "quality_score",
         "sample_count",
+        "capabilities",
+        "valid_until",
     } <= columns
 
 

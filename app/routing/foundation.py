@@ -33,6 +33,8 @@ class PolicySummary:
     status: str
     classifier_version: str
     score_version: str
+    minimum_sample_count: int
+    cold_start_mode: str
 
 
 @dataclass(frozen=True, slots=True)
@@ -85,6 +87,8 @@ async def seed_routing_foundation(session: AsyncSession) -> FoundationSeedResult
                 "complex": {"quality": 0.75, "latency": 0.15, "cost": 0.10},
             },
             minimum_quality={},
+            minimum_sample_count=5,
+            cold_start_mode="static_profile",
         )
         session.add(policy)
 
@@ -130,6 +134,8 @@ async def inspect_routing_foundation(session: AsyncSession) -> FoundationInspect
                 status=item.status,
                 classifier_version=item.classifier_version,
                 score_version=item.score_version,
+                minimum_sample_count=item.minimum_sample_count,
+                cold_start_mode=item.cold_start_mode,
             )
             for item in policies
         ),

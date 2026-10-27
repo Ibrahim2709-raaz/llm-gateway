@@ -37,6 +37,8 @@ async def test_seed_routing_foundation_creates_versioned_baseline_records() -> N
     assert policy.version == BASELINE_POLICY_VERSION
     assert policy.status == "active"
     assert policy.classifier_version == "complexity-rules-v1"
+    assert policy.minimum_sample_count == 5
+    assert policy.cold_start_mode == "static_profile"
     assert policy.strategy_weights["complex"]["quality"] == 0.75
     session.flush.assert_awaited_once()
 
@@ -57,6 +59,8 @@ async def test_seed_routing_foundation_is_idempotent() -> None:
         score_version="static-model-profiles-v1",
         strategy_weights={},
         minimum_quality={},
+        minimum_sample_count=5,
+        cold_start_mode="static_profile",
     )
     session = AsyncMock(spec=AsyncSession)
     session.scalar.side_effect = [dataset, policy]
@@ -85,6 +89,8 @@ async def test_inspect_routing_foundation_returns_safe_summary() -> None:
         score_version="static-model-profiles-v1",
         strategy_weights={},
         minimum_quality={},
+        minimum_sample_count=5,
+        cold_start_mode="static_profile",
     )
     dataset_result = Mock()
     dataset_result.scalars.return_value.all.return_value = [dataset]
@@ -105,6 +111,8 @@ async def test_inspect_routing_foundation_returns_safe_summary() -> None:
             status="active",
             classifier_version="complexity-rules-v1",
             score_version="static-model-profiles-v1",
+            minimum_sample_count=5,
+            cold_start_mode="static_profile",
         ),
     )
     assert inspection.capability_score_count == 3
@@ -121,6 +129,8 @@ def test_routing_foundation_cli_parser_and_output() -> None:
                 "active",
                 "complexity-rules-v1",
                 "static-model-profiles-v1",
+                5,
+                "static_profile",
             ),
         ),
         capability_score_count=0,
@@ -130,4 +140,5 @@ def test_routing_foundation_cli_parser_and_output() -> None:
 
     assert "core-task-taxonomy 1.0.0 [draft]" in output
     assert "baseline-v1 [active]" in output
+    assert "minimum_samples=5 cold_start=static_profile" in output
     assert "Capability scores: 0" in output
