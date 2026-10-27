@@ -83,14 +83,33 @@ jobs:
       - name: Start gateway and dependencies
         run: docker compose up --build --detach --wait gateway
 
-      - name: Create smoke-test client and exercise API
+      - name: Create smoke-test clients and exercise API
         shell: bash
         run: |
-          key_output="$(docker compose exec -T gateway llm-gateway-create-key --client-name ci-smoke)"
-          gateway_key="$(printf '%s\n' "$key_output" | tail -n 1 | tr -d '\r')"
-          test -n "$gateway_key"
-          echo "::add-mask::$gateway_key"
-          python scripts/e2e_smoke.py --api-key "$gateway_key"
+          primary_output="$(docker compose exec -T gateway llm-gateway-create-key --client-name ci-primary)"
+          secondary_output="$(docker compose exec -T gateway llm-gateway-create-key --client-name ci-secondary)"
+          primary_key="$(printf '%s\n' "$primary_output" | tail -n 1 | tr -d '\r')"
+          secondary_key="$(printf '%s\n' "$secondary_output" | tail -n 1 | tr -d '\r')"
+          primary_client_id="$(printf '%s\n' "$primary_output" | sed -n 's/^Client ID: //p' | tr -d '\r')"
+          secondary_client_id="$(printf '%s\n' "$secondary_output" | sed -n 's/^Client ID: //p' | tr -d '\r')"
+          test -n "$primary_key"
+          test -n "$secondary_key"
+          test -n "$primary_client_id"
+          test -n "$secondary_client_id"
+          echo "::add-mask::$primary_key"
+          echo "::add-mask::$secondary_key"
+
+          period="$(date -u +%Y-%m)"
+          docker compose exec -T gateway llm-gateway-set-budget \
+            --client-id "$primary_client_id" --period "$period" --limit-usd 1.25
+          docker compose exec -T gateway llm-gateway-set-budget \
+            --client-id "$secondary_client_id" --period "$period" --limit-usd 2.50
+
+          python scripts/e2e_smoke.py \
+            --api-key "$primary_key" \
+            --secondary-api-key "$secondary_key" \
+            --expected-budget-usd 1.25 \
+            --secondary-expected-budget-usd 2.50
 
       - name: Show service logs after failure
         if: failure()

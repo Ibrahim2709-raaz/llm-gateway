@@ -277,8 +277,10 @@ python scripts/e2e_smoke.py --api-key <the-key-printed-above>
 The script validates health, invalid-key rejection, an authenticated mock-model
 completion, response caching, usage persistence, request/rate-limit headers,
 and Prometheus metrics. It never invokes a paid provider. GitHub Actions runs
-the same flow from a clean checkout by starting only the gateway, PostgreSQL,
-and Redis, then removes the stack and its volumes.
+the same flow from a clean checkout with two customers and also verifies that
+their caches, rate-limit counters, and monthly budgets remain isolated. CI
+starts only the gateway, PostgreSQL, and Redis, then removes the stack and its
+volumes.
 
 To run PostgreSQL and Redis only while developing locally:
 

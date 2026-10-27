@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import argparse
 import json
+import math
 import os
 import time
 from datetime import UTC, datetime
@@ -80,7 +81,45 @@ def wait_for_readiness(base_url: str, timeout_seconds: int) -> None:
     raise SmokeTestError(f"Gateway was not ready after {timeout_seconds}s: {last_error}")
 
 
-def run(base_url: str, api_key: str, timeout_seconds: int) -> None:
+def assert_completion(
+    completion: dict[str, Any] | str,
+    *,
+    cached: bool,
+    label: str,
+) -> dict[str, Any]:
+    if not isinstance(completion, dict):
+        raise SmokeTestError(f"{label} completion was not JSON")
+    require(completion.get("model") == "mock-1", f"{label} did not select the mock model")
+    require(
+        completion.get("gateway", {}).get("provider") == "mock",
+        f"{label} did not use the mock provider",
+    )
+    require(
+        completion.get("gateway", {}).get("cached") is cached,
+        f"{label} returned an unexpected cache state",
+    )
+    return completion
+
+
+def assert_budget(usage: dict[str, Any], expected_budget_usd: float | None, label: str) -> None:
+    if expected_budget_usd is None:
+        return
+    budget = usage.get("budget_usd")
+    require(
+        isinstance(budget, (int, float)) and math.isclose(budget, expected_budget_usd),
+        f"{label} reported budget {budget!r}, expected {expected_budget_usd}",
+    )
+
+
+def run(
+    base_url: str,
+    api_key: str,
+    timeout_seconds: int,
+    *,
+    secondary_api_key: str | None = None,
+    expected_budget_usd: float | None = None,
+    secondary_expected_budget_usd: float | None = None,
+) -> None:
     wait_for_readiness(base_url, timeout_seconds)
 
     liveness, live_headers = request(base_url, "/health/live")
@@ -119,10 +158,7 @@ def run(base_url: str, api_key: str, timeout_seconds: int) -> None:
         api_key=api_key,
         payload=completion_request,
     )
-    require(isinstance(first, dict), "First completion was not JSON")
-    require(first.get("model") == "mock-1", "Mock model was not selected")
-    require(first.get("gateway", {}).get("provider") == "mock", "Mock provider was not used")
-    require(first.get("gateway", {}).get("cached") is False, "First completion was cached")
+    first = assert_completion(first, cached=False, label="First primary")
     require(
         first.get("gateway", {}).get("attempts", [{}])[-1].get("outcome") == "success",
         "First completion has no successful provider attempt",
@@ -143,8 +179,7 @@ def run(base_url: str, api_key: str, timeout_seconds: int) -> None:
         api_key=api_key,
         payload=completion_request,
     )
-    require(isinstance(second, dict), "Second completion was not JSON")
-    require(second.get("gateway", {}).get("cached") is True, "Second completion missed cache")
+    second = assert_completion(second, cached=True, label="Second primary")
     require(second.get("gateway", {}).get("cost_usd") == 0, "Cache hit reported a cost")
     require(second.get("gateway", {}).get("attempts") == [], "Cache hit called a provider")
     require(
@@ -156,12 +191,64 @@ def run(base_url: str, api_key: str, timeout_seconds: int) -> None:
         "Cache hit reused the original request ID",
     )
 
+    if secondary_api_key is not None:
+        secondary_first, secondary_first_headers = request(
+            base_url,
+            "/v1/chat/completions",
+            method="POST",
+            api_key=secondary_api_key,
+            payload=completion_request,
+        )
+        secondary_first = assert_completion(
+            secondary_first,
+            cached=False,
+            label="First secondary",
+        )
+        require(
+            secondary_first.get("choices") == first.get("choices"),
+            "Secondary customer received different deterministic mock content",
+        )
+        require(
+            int(secondary_first_headers["x-ratelimit-remaining"])
+            > int(second_headers["x-ratelimit-remaining"]),
+            "Secondary customer did not receive an independent rate-limit counter",
+        )
+
+        secondary_second, _ = request(
+            base_url,
+            "/v1/chat/completions",
+            method="POST",
+            api_key=secondary_api_key,
+            payload=completion_request,
+        )
+        assert_completion(secondary_second, cached=True, label="Second secondary")
+
     period = datetime.now(UTC).strftime("%Y-%m")
     usage_path = f"/v1/usage?{urlencode({'period': period})}"
     usage, _ = request(base_url, usage_path, api_key=api_key)
-    require(isinstance(usage, dict), "Usage summary was not JSON")
+    if not isinstance(usage, dict):
+        raise SmokeTestError("Usage summary was not JSON")
     require(usage.get("request_count", 0) >= 2, "Usage summary omitted smoke-test requests")
     require(usage.get("total_tokens", 0) > 0, "Usage summary omitted provider tokens")
+    assert_budget(usage, expected_budget_usd, "Primary customer")
+
+    if secondary_api_key is not None:
+        secondary_usage, _ = request(base_url, usage_path, api_key=secondary_api_key)
+        if not isinstance(secondary_usage, dict):
+            raise SmokeTestError("Secondary usage summary was not JSON")
+        require(
+            secondary_usage.get("request_count", 0) >= 2,
+            "Secondary usage summary omitted smoke-test requests",
+        )
+        require(
+            secondary_usage.get("total_tokens", 0) > 0,
+            "Secondary usage summary omitted provider tokens",
+        )
+        assert_budget(
+            secondary_usage,
+            secondary_expected_budget_usd,
+            "Secondary customer",
+        )
 
     metrics, _ = request(base_url, "/metrics")
     require(isinstance(metrics, str), "Metrics response was not text")
@@ -173,7 +260,10 @@ def run(base_url: str, api_key: str, timeout_seconds: int) -> None:
     ):
         require(metric in metrics, f"Metrics response omitted {metric}")
 
-    print("End-to-end smoke test passed: auth, health, completion, cache, usage, and metrics.")
+    checked = "auth, health, completion, cache, usage, and metrics"
+    if secondary_api_key is not None:
+        checked += ", plus customer isolation"
+    print(f"End-to-end smoke test passed: {checked}.")
 
 
 def parse_args() -> argparse.Namespace:
@@ -183,17 +273,29 @@ def parse_args() -> argparse.Namespace:
         default=os.getenv("GATEWAY_BASE_URL", "http://localhost:8000"),
     )
     parser.add_argument("--api-key", default=os.getenv("GATEWAY_API_KEY"))
+    parser.add_argument("--secondary-api-key", default=os.getenv("GATEWAY_SECONDARY_API_KEY"))
+    parser.add_argument("--expected-budget-usd", type=float)
+    parser.add_argument("--secondary-expected-budget-usd", type=float)
     parser.add_argument("--timeout-seconds", type=int, default=90)
     arguments = parser.parse_args()
     if not arguments.api_key:
         parser.error("--api-key or GATEWAY_API_KEY is required")
+    if arguments.secondary_expected_budget_usd is not None and not arguments.secondary_api_key:
+        parser.error("--secondary-expected-budget-usd requires --secondary-api-key")
     return arguments
 
 
 def main() -> None:
     arguments = parse_args()
     try:
-        run(arguments.base_url, arguments.api_key, arguments.timeout_seconds)
+        run(
+            arguments.base_url,
+            arguments.api_key,
+            arguments.timeout_seconds,
+            secondary_api_key=arguments.secondary_api_key,
+            expected_budget_usd=arguments.expected_budget_usd,
+            secondary_expected_budget_usd=arguments.secondary_expected_budget_usd,
+        )
     except SmokeTestError as error:
         raise SystemExit(f"Smoke test failed: {error}") from error
 
