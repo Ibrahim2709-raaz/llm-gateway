@@ -77,6 +77,17 @@ prompts or invent capability scores before evaluations exist.
 Policy activation is transactional, permits only one active version, and records
 an immutable operator audit event. `show` includes recent activation history.
 
+Milestone Two includes a deterministic classifier inspection command. It reports
+the primary task category, difficulty, confidence, matched safe signals, reason
+codes, and classifier version without calling an LLM or storing the prompt:
+
+```bash
+llm-gateway-classify "Summarize this Python function and list the key points"
+```
+
+The classifier is review-only at this checkpoint and does not change live model
+selection. It will enter routing only after the labeled validation gate passes.
+
 ## Project documentation
 
 - [MVP scope and acceptance criteria](docs/mvp-scope.md)
