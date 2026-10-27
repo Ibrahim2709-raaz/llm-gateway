@@ -13,6 +13,8 @@ from sqlalchemy import (
     Numeric,
     String,
     UniqueConstraint,
+    func,
+    text,
 )
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -20,6 +22,7 @@ from app.db.base import Base, TimestampMixin, UUIDPrimaryKeyMixin
 from app.routing.taxonomy import (
     COLD_START_MODES,
     EVALUATION_RUN_STATUSES,
+    POLICY_ACTIVATION_ACTIONS,
     TASK_CATEGORIES,
     TASK_DIFFICULTIES,
     VERSION_STATUSES,
@@ -238,6 +241,12 @@ class RoutingPolicyVersion(UUIDPrimaryKeyMixin, TimestampMixin, Base):
             "minimum_sample_count > 0",
             name="routing_policy_minimum_sample_count",
         ),
+        Index(
+            "uq_routing_policy_single_active",
+            "status",
+            unique=True,
+            postgresql_where=text("status = 'active'"),
+        ),
     )
 
     version: Mapped[str] = mapped_column(String(64), nullable=False)
@@ -251,6 +260,29 @@ class RoutingPolicyVersion(UUIDPrimaryKeyMixin, TimestampMixin, Base):
         String(32), default="static_profile", nullable=False
     )
     activated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class RoutingPolicyActivation(UUIDPrimaryKeyMixin, Base):
+    __tablename__ = "routing_policy_activations"
+    __table_args__ = (
+        CheckConstraint(
+            f"action IN ({_sql_values(POLICY_ACTIVATION_ACTIONS)})",
+            name="routing_policy_activation_action",
+        ),
+    )
+
+    policy_id: Mapped[UUID] = mapped_column(
+        ForeignKey("routing_policy_versions.id", ondelete="RESTRICT"), nullable=False, index=True
+    )
+    previous_policy_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("routing_policy_versions.id", ondelete="RESTRICT"), index=True
+    )
+    action: Mapped[str] = mapped_column(String(32), nullable=False)
+    actor: Mapped[str] = mapped_column(String(200), nullable=False)
+    reason: Mapped[str | None] = mapped_column(String(500))
+    activated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
 
 
 class RoutingDecisionSnapshot(UUIDPrimaryKeyMixin, Base):

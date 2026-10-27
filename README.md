@@ -65,11 +65,17 @@ inspect the versioned foundation without exposing it through a customer API:
 alembic upgrade head
 llm-gateway-routing-foundation seed
 llm-gateway-routing-foundation show
+# Promote a reviewed draft policy:
+llm-gateway-routing-foundation activate candidate-v1 --actor release-bot --reason "gates passed"
+# Return to a previously active policy:
+llm-gateway-routing-foundation rollback baseline-v1 --actor on-call --reason "rollback"
 ```
 
 The seed is idempotent. It records the released `baseline-v1` policy and creates
 the initial task-taxonomy dataset in draft state; it does not store production
 prompts or invent capability scores before evaluations exist.
+Policy activation is transactional, permits only one active version, and records
+an immutable operator audit event. `show` includes recent activation history.
 
 ## Project documentation
 

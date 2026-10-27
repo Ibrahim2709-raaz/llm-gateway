@@ -9,6 +9,7 @@ from app.db.models import (
     ModelCapabilityScore,
     ProviderConfig,
     RoutingDecisionSnapshot,
+    RoutingPolicyActivation,
     RoutingPolicyVersion,
     UsageRecord,
 )
@@ -25,6 +26,7 @@ def test_initial_database_tables_are_registered() -> None:
         ModelCapabilityScore.__tablename__,
         ProviderConfig.__tablename__,
         RoutingDecisionSnapshot.__tablename__,
+        RoutingPolicyActivation.__tablename__,
         RoutingPolicyVersion.__tablename__,
         UsageRecord.__tablename__,
     }
@@ -78,3 +80,10 @@ def test_routing_snapshots_store_explanations_without_prompt_content() -> None:
     } <= columns
     assert "prompt" not in columns
     assert "response" not in columns
+
+
+def test_policy_activations_are_audited_without_secrets() -> None:
+    columns = set(RoutingPolicyActivation.__table__.columns.keys())
+
+    assert {"policy_id", "previous_policy_id", "action", "actor", "reason"} <= columns
+    assert "api_key" not in columns

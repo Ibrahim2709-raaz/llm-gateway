@@ -2,12 +2,14 @@ from app.routing.taxonomy import (
     COLD_START_MODES,
     EVALUATION_RUN_STATUSES,
     MODEL_CAPABILITIES,
+    POLICY_ACTIVATION_ACTIONS,
     TASK_CATEGORIES,
     TASK_DIFFICULTIES,
     VERSION_STATUSES,
     ColdStartMode,
     EvaluationRunStatus,
     ModelCapability,
+    PolicyActivationAction,
     TaskCategory,
     TaskDifficulty,
     VersionStatus,
@@ -32,6 +34,7 @@ def test_taxonomy_values_serialize_as_strings() -> None:
     assert str(VersionStatus.ACTIVE) == "active"
     assert str(EvaluationRunStatus.COMPLETED) == "completed"
     assert str(ColdStartMode.EXPLICIT_ONLY) == "explicit_only"
+    assert str(PolicyActivationAction.ROLLBACK) == "rollback"
 
 
 def test_supported_capabilities_and_lifecycle_values_are_explicit() -> None:
@@ -44,3 +47,4 @@ def test_supported_capabilities_and_lifecycle_values_are_explicit() -> None:
     assert VERSION_STATUSES == ("draft", "active", "retired")
     assert EVALUATION_RUN_STATUSES == ("pending", "running", "completed", "failed")
     assert COLD_START_MODES == ("static_profile", "exclude", "explicit_only")
+    assert POLICY_ACTIVATION_ACTIONS == ("activate", "rollback")

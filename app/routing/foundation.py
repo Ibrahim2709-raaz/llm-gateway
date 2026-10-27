@@ -4,7 +4,12 @@ from uuid import UUID, uuid4
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.db.models import EvaluationDataset, ModelCapabilityScore, RoutingPolicyVersion
+from app.db.models import (
+    EvaluationDataset,
+    ModelCapabilityScore,
+    RoutingPolicyActivation,
+    RoutingPolicyVersion,
+)
 from app.routing.taxonomy import TASK_CATEGORIES, TASK_DIFFICULTIES
 
 BASELINE_DATASET_NAME = "core-task-taxonomy"
@@ -42,6 +47,15 @@ class FoundationInspection:
     datasets: tuple[DatasetSummary, ...]
     policies: tuple[PolicySummary, ...]
     capability_score_count: int
+    activations: tuple["ActivationSummary", ...] = ()
+
+
+@dataclass(frozen=True, slots=True)
+class ActivationSummary:
+    policy_version: str
+    previous_policy_version: str | None
+    action: str
+    actor: str
 
 
 async def seed_routing_foundation(session: AsyncSession) -> FoundationSeedResult:
@@ -123,6 +137,20 @@ async def inspect_routing_foundation(session: AsyncSession) -> FoundationInspect
         .all()
     )
     score_count = await session.scalar(select(func.count(ModelCapabilityScore.id)))
+    activation_rows = (
+        await session.execute(
+            select(
+                RoutingPolicyActivation,
+                RoutingPolicyVersion.version,
+            )
+            .join(
+                RoutingPolicyVersion,
+                RoutingPolicyVersion.id == RoutingPolicyActivation.policy_id,
+            )
+            .order_by(RoutingPolicyActivation.activated_at.desc())
+        )
+    ).all()
+    policy_versions = {policy.id: policy.version for policy in policies}
     return FoundationInspection(
         datasets=tuple(
             DatasetSummary(name=item.name, version=item.version, status=item.status)
@@ -140,4 +168,17 @@ async def inspect_routing_foundation(session: AsyncSession) -> FoundationInspect
             for item in policies
         ),
         capability_score_count=int(score_count or 0),
+        activations=tuple(
+            ActivationSummary(
+                policy_version=version,
+                previous_policy_version=(
+                    policy_versions.get(event.previous_policy_id)
+                    if event.previous_policy_id is not None
+                    else None
+                ),
+                action=event.action,
+                actor=event.actor,
+            )
+            for event, version in activation_rows
+        ),
     )
