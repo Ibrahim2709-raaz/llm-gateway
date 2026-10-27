@@ -55,6 +55,7 @@ in GitHub Actions and perform final release verification.
 - [API contract and examples](docs/api-contract.md)
 - [OpenAPI 3.1 specification](docs/openapi.yaml)
 - [Production deployment and rollback guide](docs/deployment.md)
+- [Intelligent model routing roadmap](docs/intelligent-routing-roadmap.md)
 
 ## Run locally
 
