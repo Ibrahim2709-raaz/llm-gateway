@@ -32,12 +32,14 @@ CATEGORY_RULES: dict[TaskCategory, tuple[SignalRule, ...]] = {
     TaskCategory.CODING: (
         _rule(
             "coding_debugging",
-            r"\b(debug|bug|traceback|stack trace|exception|compile error|fix (?:this|the) code)\b",
+            r"\b(debug|depurar|bug|traceback|stack trace|exception|compile error|"
+            r"fix (?:this|the) code)\b",
             weight=2,
         ),
         _rule(
             "coding_construct",
-            r"\b(function|class|method|api endpoint|sql query|regular expression|regex)\b",
+            r"\b(function|funci[oó]n|class|method|api endpoint|sql query|"
+            r"regular expression|regex)\b",
         ),
         _rule(
             "coding_language",
@@ -48,18 +50,20 @@ CATEGORY_RULES: dict[TaskCategory, tuple[SignalRule, ...]] = {
     TaskCategory.REASONING: (
         _rule(
             "reasoning_formal",
-            r"\b(prove|proof|derive|equation|calculate|logic puzzle|theorem)\b",
+            r"\b(prove|proof|demuestra|derive|equation|calculate|calcula|"
+            r"logic puzzle|theorem)\b",
             weight=2,
         ),
         _rule(
             "reasoning_analysis",
-            r"\b(explain why|analy[sz]e|compare|trade[- ]offs?|step[- ]by[- ]step)\b",
+            r"\b(explain why|analy[sz]e|analiza|compare|compara|trade[- ]offs?|"
+            r"step[- ]by[- ]step)\b",
         ),
     ),
     TaskCategory.SUMMARIZATION: (
         _rule(
             "summarization_direct",
-            r"\b(summari[sz]e|summary|tldr|tl;dr|condense|abridge)\b",
+            r"\b(summari[sz]e|summary|resume|resumen|tldr|tl;dr|condense|abridge)\b",
             weight=2,
         ),
         _rule(
@@ -70,7 +74,7 @@ CATEGORY_RULES: dict[TaskCategory, tuple[SignalRule, ...]] = {
     TaskCategory.EXTRACTION: (
         _rule(
             "extraction_direct",
-            r"\b(extract|identify (?:the )?(?:fields|entities)|parse the following)\b",
+            r"\b(extract|extrae|identify (?:the )?(?:fields|entities)|parse the following)\b",
             weight=2,
         ),
         _rule(
@@ -78,12 +82,29 @@ CATEGORY_RULES: dict[TaskCategory, tuple[SignalRule, ...]] = {
             r"\b(return|output|respond) (?:it )?(?:as|in) (?:valid )?(json|csv|a table)\b",
         ),
     ),
-    TaskCategory.GENERAL_CHAT: (),
+    TaskCategory.GENERAL_CHAT: (
+        _rule(
+            "general_conversation",
+            r"\b(hello|hi|hola|how are you|thank you|thanks|tell me a joke)\b",
+            weight=2,
+        ),
+        _rule(
+            "general_creation",
+            r"\b(brainstorm|write (?:an? )?(?:email|story|poem)|give me ideas)\b",
+            weight=2,
+        ),
+    ),
 }
 
 COMPLEX_DIFFICULTY_PATTERN = re.compile(
     r"\b(debug|root cause|architecture|distributed system|prove|proof|"
     r"optimi[sz]e|multi[- ]step|step[- ]by[- ]step)\b",
+    re.IGNORECASE,
+)
+
+MEDIUM_DIFFICULTY_PATTERN = re.compile(
+    r"\b(several|multiple|with tests|handle errors?|edge cases?|trade[- ]offs?|"
+    r"three or more|across sections)\b",
     re.IGNORECASE,
 )
 
@@ -97,9 +118,7 @@ def estimate_prompt_tokens(request: ChatCompletionRequest) -> int:
 
 def classify_request(request: ChatCompletionRequest) -> TaskClassification:
     prompt = "\n".join(message.content for message in request.messages)
-    scores: dict[TaskCategory, int] = {
-        category: 0 for category in TaskCategory if category is not TaskCategory.GENERAL_CHAT
-    }
+    scores: dict[TaskCategory, int] = {category: 0 for category in TaskCategory}
     matched: list[str] = []
     for category, rules in CATEGORY_RULES.items():
         for rule in rules:
@@ -163,7 +182,7 @@ def _classify_difficulty(
     if (
         prompt_tokens >= 200
         or len(request.messages) >= 4
-        or category in {TaskCategory.CODING, TaskCategory.REASONING}
+        or MEDIUM_DIFFICULTY_PATTERN.search(prompt)
     ):
         return TaskDifficulty.MEDIUM, "difficulty_medium_signal"
     return TaskDifficulty.SIMPLE, "difficulty_simple_signal"

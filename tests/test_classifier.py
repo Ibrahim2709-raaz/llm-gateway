@@ -55,7 +55,7 @@ def test_tied_category_signals_fall_back_to_general_chat() -> None:
 
 
 def test_no_signal_uses_safe_general_chat_fallback() -> None:
-    result = classify_request(request("Hello, how are you today?"))
+    result = classify_request(request("What should I do today?"))
 
     assert result.category is TaskCategory.GENERAL_CHAT
     assert result.confidence == 0.55
@@ -70,7 +70,7 @@ def test_no_signal_uses_safe_general_chat_fallback() -> None:
     ("prompt", "difficulty"),
     [
         ("Summarize this note", TaskDifficulty.SIMPLE),
-        ("Write a Python function", TaskDifficulty.MEDIUM),
+        ("Write a Python function with tests and edge cases", TaskDifficulty.MEDIUM),
         ("Debug the root cause of this architecture", TaskDifficulty.COMPLEX),
         ("x" * 3200, TaskDifficulty.COMPLEX),
     ],
@@ -94,6 +94,14 @@ def test_tool_context_is_always_treated_as_complex() -> None:
 
     assert result.difficulty is TaskDifficulty.COMPLEX
     assert "difficulty_complex_tool_context" in result.reason_codes
+
+
+def test_short_conversation_is_confident_general_chat() -> None:
+    result = classify_request(request("Hello, how are you?"))
+
+    assert result.category is TaskCategory.GENERAL_CHAT
+    assert result.difficulty is TaskDifficulty.SIMPLE
+    assert result.confidence >= 0.65
 
 
 def test_classification_never_copies_prompt_text_into_explanations() -> None:

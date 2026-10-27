@@ -1,0 +1,30 @@
+{"id":"tune-coding-simple-01","split":"tune","prompt":"Write a Python function that adds two numbers.","category":"coding","difficulty":"simple","tags":["synthetic"]}
+{"id":"tune-coding-medium-01","split":"tune","prompt":"Create a Python class with tests and edge cases.","category":"coding","difficulty":"medium","tags":["synthetic"]}
+{"id":"tune-coding-complex-01","split":"tune","prompt":"Debug the root cause in this distributed system architecture.","category":"coding","difficulty":"complex","tags":["synthetic"]}
+{"id":"tune-reasoning-simple-01","split":"tune","prompt":"Calculate 2 + 2.","category":"reasoning","difficulty":"simple","tags":["synthetic"]}
+{"id":"tune-reasoning-medium-01","split":"tune","prompt":"Compare multiple trade-offs between the two options.","category":"reasoning","difficulty":"medium","tags":["synthetic"]}
+{"id":"tune-reasoning-complex-01","split":"tune","prompt":"Prove this theorem step-by-step.","category":"reasoning","difficulty":"complex","tags":["synthetic"]}
+{"id":"tune-summarization-simple-01","split":"tune","prompt":"TLDR this note.","category":"summarization","difficulty":"simple","tags":["synthetic","very_short"]}
+{"id":"tune-summarization-medium-01","split":"tune","prompt":"Summarize this report into several key points.","category":"summarization","difficulty":"medium","tags":["synthetic"]}
+{"id":"tune-summarization-complex-01","split":"tune","prompt":"Summarize this distributed system architecture step-by-step.","category":"summarization","difficulty":"complex","tags":["synthetic"]}
+{"id":"tune-extraction-simple-01","split":"tune","prompt":"Extract the name and date.","category":"extraction","difficulty":"simple","tags":["synthetic"]}
+{"id":"tune-extraction-medium-01","split":"tune","prompt":"Extract multiple entities and handle edge cases.","category":"extraction","difficulty":"medium","tags":["synthetic"]}
+{"id":"tune-extraction-complex-01","split":"tune","prompt":"Extract fields from this multi-step distributed system log.","category":"extraction","difficulty":"complex","tags":["synthetic"]}
+{"id":"tune-general-simple-01","split":"tune","prompt":"Tell me a joke.","category":"general_chat","difficulty":"simple","tags":["synthetic","very_short"]}
+{"id":"tune-general-medium-01","split":"tune","prompt":"Brainstorm several names for a community event.","category":"general_chat","difficulty":"medium","tags":["synthetic"]}
+{"id":"tune-general-complex-01","split":"tune","prompt":"Brainstorm a multi-step launch plan for a community event.","category":"general_chat","difficulty":"complex","tags":["synthetic"]}
+{"id":"heldout-coding-simple-01","split":"heldout","prompt":"Escribe una función de Python para sumar dos números.","category":"coding","difficulty":"simple","tags":["synthetic","multilingual"]}
+{"id":"heldout-coding-medium-01","split":"heldout","prompt":"Build an API endpoint with tests and error handling.","category":"coding","difficulty":"medium","tags":["synthetic"]}
+{"id":"heldout-coding-complex-01","split":"heldout","prompt":"Fix this code traceback and optimize the architecture.","category":"coding","difficulty":"complex","tags":["synthetic"]}
+{"id":"heldout-reasoning-simple-01","split":"heldout","prompt":"Calcula 5 por 7.","category":"reasoning","difficulty":"simple","tags":["synthetic","multilingual"]}
+{"id":"heldout-reasoning-medium-01","split":"heldout","prompt":"Analyze multiple trade-offs in these proposals.","category":"reasoning","difficulty":"medium","tags":["synthetic"]}
+{"id":"heldout-reasoning-complex-01","split":"heldout","prompt":"Demuestra este teorema con una proof step-by-step.","category":"reasoning","difficulty":"complex","tags":["synthetic","multilingual"]}
+{"id":"heldout-summarization-simple-01","split":"heldout","prompt":"Resume este texto.","category":"summarization","difficulty":"simple","tags":["synthetic","multilingual","very_short"]}
+{"id":"heldout-summarization-medium-01","split":"heldout","prompt":"Condense this report into several main takeaways.","category":"summarization","difficulty":"medium","tags":["synthetic"]}
+{"id":"heldout-summarization-complex-01","split":"heldout","prompt":"Summarize this multi-step architecture review.","category":"summarization","difficulty":"complex","tags":["synthetic"]}
+{"id":"heldout-extraction-simple-01","split":"heldout","prompt":"Extrae el nombre y la fecha.","category":"extraction","difficulty":"simple","tags":["synthetic","multilingual"]}
+{"id":"heldout-extraction-medium-01","split":"heldout","prompt":"Parse the following and return valid JSON with multiple fields.","category":"extraction","difficulty":"medium","tags":["synthetic"]}
+{"id":"heldout-extraction-complex-01","split":"heldout","prompt":"Extract entities from this multi-step tool output.","category":"extraction","difficulty":"complex","tags":["synthetic"]}
+{"id":"heldout-general-simple-01","split":"heldout","prompt":"Hola.","category":"general_chat","difficulty":"simple","tags":["synthetic","multilingual","very_short"]}
+{"id":"heldout-general-medium-01","split":"heldout","prompt":"Write a function and compare the trade-offs.","category":"general_chat","difficulty":"medium","tags":["synthetic","ambiguous","adversarial"]}
+{"id":"heldout-general-complex-01","split":"heldout","prompt":"Brainstorm a multi-step plan for a difficult negotiation.","category":"general_chat","difficulty":"complex","tags":["synthetic"]}
