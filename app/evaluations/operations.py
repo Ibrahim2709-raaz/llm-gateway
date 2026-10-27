@@ -1,3 +1,4 @@
+from collections import defaultdict
 from dataclasses import dataclass
 from decimal import Decimal
 from uuid import UUID, uuid4
@@ -10,6 +11,7 @@ from app.db.models import (
     EvaluationCaseResult,
     EvaluationDataset,
     EvaluationRun,
+    ModelCapabilityScore,
 )
 from app.evaluations.service import RUNNER_VERSION
 
@@ -36,6 +38,13 @@ class EvaluationRunInspection:
     failed_result_count: int
     total_cost_usd: Decimal
     aggregate_metrics: dict[str, object]
+
+
+@dataclass(frozen=True, slots=True)
+class CandidateScoreSummary:
+    score_version: str
+    score_count: int
+    sample_count: int
 
 
 async def seed_smoke_evaluation_dataset(
@@ -203,3 +212,100 @@ async def inspect_evaluation_run(
         total_cost_usd=total_cost,
         aggregate_metrics=run.aggregate_metrics,
     )
+
+
+async def create_candidate_scores(
+    session: AsyncSession,
+    *,
+    run_id: UUID,
+    score_version: str,
+) -> CandidateScoreSummary:
+    normalized_version = score_version.strip()
+    if not normalized_version:
+        raise ValueError("Score version must not be empty")
+    run = await session.get(EvaluationRun, run_id)
+    if run is None:
+        raise ValueError(f"Evaluation run '{run_id}' was not found")
+    if run.status != "completed":
+        raise ValueError("Candidate scores require a completed evaluation run")
+
+    expected_case_count = int(
+        await session.scalar(
+            select(func.count(EvaluationCase.id)).where(
+                EvaluationCase.dataset_id == run.dataset_id
+            )
+        )
+        or 0
+    )
+    result_rows = (
+        await session.execute(
+            select(EvaluationCaseResult, EvaluationCase)
+            .join(
+                EvaluationCase,
+                EvaluationCase.id == EvaluationCaseResult.evaluation_case_id,
+            )
+            .where(EvaluationCaseResult.evaluation_run_id == run.id)
+        )
+    ).all()
+    if len(result_rows) != expected_case_count:
+        raise ValueError("Evaluation run is incomplete and cannot publish candidate scores")
+    if any(result.outcome != "completed" for result, _case in result_rows):
+        raise ValueError("Evaluation run contains failed cases and cannot publish candidate scores")
+
+    existing_count = int(
+        await session.scalar(
+            select(func.count(ModelCapabilityScore.id)).where(
+                ModelCapabilityScore.provider == run.provider,
+                ModelCapabilityScore.model == run.model,
+                ModelCapabilityScore.score_version == normalized_version,
+            )
+        )
+        or 0
+    )
+    if existing_count:
+        raise ValueError(f"Candidate score version '{normalized_version}' already exists")
+
+    grouped: dict[tuple[str, str], list[tuple[Decimal, EvaluationCase]]] = defaultdict(list)
+    for result, case in result_rows:
+        if result.score is not None:
+            grouped[(case.task_category, case.difficulty)].append((result.score, case))
+    if not grouped:
+        raise ValueError("Evaluation run has no deterministic scores to aggregate")
+
+    sample_count = 0
+    for (category, difficulty), samples in sorted(grouped.items()):
+        values = [score for score, _case in samples]
+        mean = sum(values, Decimal("0")) / len(values)
+        variance = sum((score - mean) ** 2 for score in values) / len(values)
+        capabilities = ["text_generation"]
+        if all(
+            case.scoring_configuration.get("method") == "json_fields"
+            for _score, case in samples
+        ):
+            capabilities.append("structured_output")
+        session.add(
+            ModelCapabilityScore(
+                evaluation_run_id=run.id,
+                provider_config_id=run.provider_config_id,
+                provider=run.provider,
+                model=run.model,
+                score_version=normalized_version,
+                task_category=category,
+                difficulty=difficulty,
+                quality_score=mean,
+                sample_count=len(values),
+                score_variance=variance,
+                capabilities=capabilities,
+                status="draft",
+                valid_from=None,
+                valid_until=None,
+            )
+        )
+        sample_count += len(values)
+    run.aggregate_metrics = {
+        **run.aggregate_metrics,
+        "candidate_score_version": normalized_version,
+        "candidate_score_count": len(grouped),
+    }
+    await session.flush()
+    return CandidateScoreSummary(normalized_version, len(grouped), sample_count)

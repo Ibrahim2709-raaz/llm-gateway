@@ -6,10 +6,16 @@ import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.cli.evaluation_harness import build_parser
-from app.db.models import EvaluationCase, EvaluationDataset, EvaluationRun
+from app.db.models import (
+    EvaluationCase,
+    EvaluationCaseResult,
+    EvaluationDataset,
+    EvaluationRun,
+)
 from app.evaluations.operations import (
     SMOKE_DATASET_NAME,
     SMOKE_DATASET_VERSION,
+    create_candidate_scores,
     create_evaluation_run,
     inspect_evaluation_run,
     seed_smoke_evaluation_dataset,
@@ -118,3 +124,109 @@ def test_evaluation_cli_parser_supports_full_operator_workflow() -> None:
     assert create.dataset_version == SMOKE_DATASET_VERSION
     run_id = uuid4()
     assert build_parser().parse_args(["resume", str(run_id)]).run_id == run_id
+    publish = build_parser().parse_args(
+        ["publish-scores", str(run_id), "--score-version", "scores-v1"]
+    )
+    assert publish.score_version == "scores-v1"
+
+
+@pytest.mark.anyio
+async def test_complete_run_creates_immutable_draft_candidate_scores() -> None:
+    run = EvaluationRun(
+        id=uuid4(),
+        dataset_id=uuid4(),
+        provider="mock",
+        model="mock-1",
+        status="completed",
+        runner_version=RUNNER_VERSION,
+        configuration={},
+        aggregate_metrics={},
+    )
+    first = EvaluationCase(
+        id=uuid4(),
+        dataset_id=run.dataset_id,
+        external_id="one",
+        task_category="reasoning",
+        difficulty="simple",
+        prompt={},
+        expected_output={},
+        scoring_configuration={"method": "exact_match"},
+    )
+    second = EvaluationCase(
+        id=uuid4(),
+        dataset_id=run.dataset_id,
+        external_id="two",
+        task_category="reasoning",
+        difficulty="simple",
+        prompt={},
+        expected_output={},
+        scoring_configuration={"method": "exact_match"},
+    )
+    results = [
+        EvaluationCaseResult(
+            evaluation_run_id=run.id,
+            evaluation_case_id=first.id,
+            outcome="completed",
+            score=Decimal("1"),
+            metrics={},
+            prompt_tokens=1,
+            completion_tokens=1,
+            cost_usd=Decimal("0"),
+            latency_ms=1,
+        ),
+        EvaluationCaseResult(
+            evaluation_run_id=run.id,
+            evaluation_case_id=second.id,
+            outcome="completed",
+            score=Decimal("0.5"),
+            metrics={},
+            prompt_tokens=1,
+            completion_tokens=1,
+            cost_usd=Decimal("0"),
+            latency_ms=1,
+        ),
+    ]
+    rows = Mock()
+    rows.all.return_value = list(zip(results, [first, second], strict=True))
+    session = AsyncMock(spec=AsyncSession)
+    session.get.return_value = run
+    session.scalar.side_effect = [2, 0]
+    session.execute.return_value = rows
+
+    summary = await create_candidate_scores(
+        session, run_id=run.id, score_version="scores-v1"
+    )
+
+    assert summary.score_count == 1
+    assert summary.sample_count == 2
+    score = session.add.call_args.args[0]
+    assert score.status == "draft"
+    assert score.quality_score == Decimal("0.75")
+    assert score.score_variance == Decimal("0.0625")
+    assert score.capabilities == ["text_generation"]
+    assert run.aggregate_metrics["candidate_score_version"] == "scores-v1"
+
+
+@pytest.mark.anyio
+async def test_partial_or_failed_run_cannot_publish_scores() -> None:
+    run = EvaluationRun(
+        id=uuid4(),
+        dataset_id=uuid4(),
+        provider="mock",
+        model="mock-1",
+        status="completed",
+        runner_version=RUNNER_VERSION,
+        configuration={},
+        aggregate_metrics={},
+    )
+    rows = Mock()
+    rows.all.return_value = []
+    session = AsyncMock(spec=AsyncSession)
+    session.get.return_value = run
+    session.scalar.return_value = 1
+    session.execute.return_value = rows
+
+    with pytest.raises(ValueError, match="incomplete"):
+        await create_candidate_scores(session, run_id=run.id, score_version="scores-v1")
+
+    session.add.assert_not_called()

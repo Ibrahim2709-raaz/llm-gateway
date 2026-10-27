@@ -10,6 +10,7 @@ from app.db.session import session_factory
 from app.evaluations.operations import (
     SMOKE_DATASET_NAME,
     SMOKE_DATASET_VERSION,
+    create_candidate_scores,
     create_evaluation_run,
     inspect_evaluation_run,
     seed_smoke_evaluation_dataset,
@@ -31,6 +32,11 @@ def build_parser() -> argparse.ArgumentParser:
     for command_name in ("run", "resume", "show"):
         command = commands.add_parser(command_name)
         command.add_argument("run_id", type=UUID)
+    publish = commands.add_parser(
+        "publish-scores", help="Create an immutable draft score version from a complete run."
+    )
+    publish.add_argument("run_id", type=UUID)
+    publish.add_argument("--score-version", required=True)
     return parser
 
 
@@ -56,10 +62,18 @@ async def run_command(arguments: argparse.Namespace) -> str:
             )
         if arguments.command in {"run", "resume"}:
             async with factory() as session:
-                summary = await DatabaseEvaluationService(
+                run_summary = await DatabaseEvaluationService(
                     session, resources.providers
                 ).execute(arguments.run_id, resume=arguments.command == "resume")
-            return json.dumps(asdict(summary), indent=2, default=str)
+            return json.dumps(asdict(run_summary), indent=2, default=str)
+        if arguments.command == "publish-scores":
+            async with factory.begin() as session:
+                score_summary = await create_candidate_scores(
+                    session,
+                    run_id=arguments.run_id,
+                    score_version=arguments.score_version,
+                )
+            return json.dumps(asdict(score_summary), indent=2, default=str)
         async with factory() as session:
             inspection = await inspect_evaluation_run(session, arguments.run_id)
         return json.dumps(asdict(inspection), indent=2, default=str)

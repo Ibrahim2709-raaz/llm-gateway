@@ -100,10 +100,13 @@ llm-gateway-eval seed-smoke
 llm-gateway-eval create --provider mock --model mock-1
 llm-gateway-eval run <RUN_ID>
 llm-gateway-eval show <RUN_ID>
+llm-gateway-eval publish-scores <RUN_ID> --score-version mock-smoke-v1
 ```
 
 Use `llm-gateway-eval resume <RUN_ID>` after an interrupted run. Each completed
 case is committed independently, so resume skips immutable existing results.
+Publishing scores is allowed only for a fully completed run with no failed cases;
+it creates a draft score version and never activates routing automatically.
 
 ## Project documentation
 
