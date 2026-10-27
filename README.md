@@ -32,8 +32,9 @@ documentation) is underway. The gateway implements the unified API, OpenAI,
 Anthropic, local OpenAI-compatible, and mock providers, API-key authentication,
 distributed rate limiting, intelligent routing, retries and fallback, response
 caching, usage budgets, cost tracking, Prometheus metrics, a provisioned
-Grafana dashboard, and production-oriented API hardening. The full
-production-ready project is now approximately 96% complete.
+Grafana dashboard, production-oriented API hardening, automated CI, and a
+full-stack release smoke test. The full production-ready project is now
+approximately 98% complete.
 
 The reliability layer includes a process-local provider circuit breaker that
 stops retrying an unhealthy model, routes immediately to the next candidate
@@ -44,8 +45,8 @@ documentation in production.
 
 GitHub Actions now validates every pull request and every push to `main` by
 running Ruff, mypy, the full coverage-enforced pytest suite, and a Docker image
-build. The remaining release work is clean-checkout/end-to-end validation and
-final deployment documentation.
+build. The remaining release work is to run the new clean-checkout release gate
+in GitHub Actions and perform final release verification.
 
 ## Project documentation
 
@@ -53,6 +54,7 @@ final deployment documentation.
 - [MVP architecture](docs/architecture.md)
 - [API contract and examples](docs/api-contract.md)
 - [OpenAPI 3.1 specification](docs/openapi.yaml)
+- [Production deployment and rollback guide](docs/deployment.md)
 
 ## Run locally
 
@@ -261,6 +263,22 @@ The dashboard displays request outcomes, P95 latency, provider errors, fallback
 activity, cache hit rate, rate-limit decisions, token throughput, and cost. Its
 metrics use bounded provider/model/outcome labels and never include customer
 IDs, request IDs, prompts, credentials, or response content.
+
+### Run the end-to-end smoke test
+
+With the stack running, create a dedicated test key and pass it to the
+dependency-free smoke-test script:
+
+```bash
+docker compose exec gateway llm-gateway-create-key --client-name smoke-test
+python scripts/e2e_smoke.py --api-key <the-key-printed-above>
+```
+
+The script validates health, invalid-key rejection, an authenticated mock-model
+completion, response caching, usage persistence, request/rate-limit headers,
+and Prometheus metrics. It never invokes a paid provider. GitHub Actions runs
+the same flow from a clean checkout by starting only the gateway, PostgreSQL,
+and Redis, then removes the stack and its volumes.
 
 To run PostgreSQL and Redis only while developing locally:
 

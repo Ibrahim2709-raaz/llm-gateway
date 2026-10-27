@@ -130,8 +130,8 @@ These features are valuable, but they will not block the first release:
 The MVP is complete when all of the following are demonstrated:
 
 - [ ] The stack starts from a clean checkout with documented commands.
-- [ ] A valid API key can make a chat-completion request.
-- [ ] An invalid or revoked API key receives `401 Unauthorized`.
+- [x] A valid API key can make a chat-completion request.
+- [x] An invalid or revoked API key receives `401 Unauthorized`.
 - [ ] Two customers have independent rate limits, caches, and budgets.
 - [x] `model: auto` selects a model and exposes the routing attempts in gateway
       metadata.
@@ -143,7 +143,7 @@ The MVP is complete when all of the following are demonstrated:
 - [x] Successful provider calls store tokens, cost, latency, and status.
 - [x] Prometheus exposes gateway and provider metrics.
 - [x] Grafana shows traffic, latency, failures, fallback activity, and cost.
-- [ ] Logs can trace one request without revealing credentials.
+- [x] Logs can trace one request without revealing credentials.
 - [x] Automated tests cover authentication, routing, fallback, caching, rate
       limiting, and budget enforcement.
 
