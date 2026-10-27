@@ -21,6 +21,7 @@ from sqlalchemy.orm import Mapped, mapped_column
 from app.db.base import Base, TimestampMixin, UUIDPrimaryKeyMixin
 from app.routing.taxonomy import (
     COLD_START_MODES,
+    EVALUATION_CASE_OUTCOMES,
     EVALUATION_RUN_STATUSES,
     POLICY_ACTIVATION_ACTIONS,
     TASK_CATEGORIES,
@@ -173,6 +174,47 @@ class EvaluationRun(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     aggregate_metrics: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict, nullable=False)
     started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class EvaluationCaseResult(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "evaluation_case_results"
+    __table_args__ = (
+        UniqueConstraint(
+            "evaluation_run_id",
+            "evaluation_case_id",
+            name="uq_evaluation_case_result_run_case",
+        ),
+        CheckConstraint(
+            f"outcome IN ({_sql_values(EVALUATION_CASE_OUTCOMES)})",
+            name="evaluation_case_result_outcome",
+        ),
+        CheckConstraint(
+            "score IS NULL OR (score >= 0 AND score <= 1)",
+            name="evaluation_case_result_score_range",
+        ),
+        CheckConstraint(
+            "prompt_tokens >= 0 AND completion_tokens >= 0 AND cost_usd >= 0 AND latency_ms >= 0",
+            name="evaluation_case_result_non_negative_usage",
+        ),
+    )
+
+    evaluation_run_id: Mapped[UUID] = mapped_column(
+        ForeignKey("evaluation_runs.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    evaluation_case_id: Mapped[UUID] = mapped_column(
+        ForeignKey("evaluation_cases.id", ondelete="RESTRICT"), nullable=False, index=True
+    )
+    outcome: Mapped[str] = mapped_column(String(32), nullable=False, index=True)
+    actual_output: Mapped[dict[str, Any] | None] = mapped_column(JSON)
+    score: Mapped[Decimal | None] = mapped_column(Numeric(8, 6))
+    metrics: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict, nullable=False)
+    prompt_tokens: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    completion_tokens: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    cost_usd: Mapped[Decimal] = mapped_column(
+        Numeric(18, 8), default=Decimal("0"), nullable=False
+    )
+    latency_ms: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    error_code: Mapped[str | None] = mapped_column(String(64))
 
 
 class ModelCapabilityScore(UUIDPrimaryKeyMixin, TimestampMixin, Base):

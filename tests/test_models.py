@@ -4,6 +4,7 @@ from app.db.models import (
     BudgetLimit,
     Client,
     EvaluationCase,
+    EvaluationCaseResult,
     EvaluationDataset,
     EvaluationRun,
     ModelCapabilityScore,
@@ -21,6 +22,7 @@ def test_initial_database_tables_are_registered() -> None:
         BudgetLimit.__tablename__,
         Client.__tablename__,
         EvaluationCase.__tablename__,
+        EvaluationCaseResult.__tablename__,
         EvaluationDataset.__tablename__,
         EvaluationRun.__tablename__,
         ModelCapabilityScore.__tablename__,
@@ -65,6 +67,24 @@ def test_capability_scores_are_versioned_by_task_and_difficulty() -> None:
         "sample_count",
         "capabilities",
         "valid_until",
+    } <= columns
+
+
+def test_evaluation_results_capture_outcomes_usage_and_cost() -> None:
+    columns = set(EvaluationCaseResult.__table__.columns.keys())
+
+    assert {
+        "evaluation_run_id",
+        "evaluation_case_id",
+        "outcome",
+        "actual_output",
+        "score",
+        "metrics",
+        "prompt_tokens",
+        "completion_tokens",
+        "cost_usd",
+        "latency_ms",
+        "error_code",
     } <= columns
 
 
