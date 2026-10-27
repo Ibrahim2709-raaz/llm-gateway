@@ -111,6 +111,8 @@ After operator review, activate a sufficiently sampled score version with a
 bounded freshness window:
 
 ```bash
+llm-gateway-eval compare-scores --provider openai --model MODEL \
+  --score-version VERSION
 llm-gateway-eval activate-scores --provider openai --model MODEL \
   --score-version VERSION --actor release-bot --valid-days 30
 llm-gateway-eval rollback-scores --provider openai --model MODEL \

@@ -1,5 +1,6 @@
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
+from decimal import Decimal
 from typing import Literal
 
 from sqlalchemy import func, or_, select
@@ -25,6 +26,100 @@ class ScoreActivationResult:
     action: ScoreActivationAction
     score_count: int
     valid_until: datetime
+
+
+@dataclass(frozen=True, slots=True)
+class ScoreComparisonRow:
+    task_category: str
+    difficulty: str
+    candidate_quality: Decimal
+    active_quality: Decimal | None
+    quality_delta: Decimal | None
+    candidate_samples: int
+    candidate_variance: Decimal | None
+    capabilities: tuple[str, ...]
+
+
+@dataclass(frozen=True, slots=True)
+class ScoreVersionComparison:
+    provider: str
+    model: str
+    candidate_version: str
+    candidate_status: str
+    active_version: str | None
+    rows: tuple[ScoreComparisonRow, ...]
+
+
+async def compare_score_version(
+    session: AsyncSession,
+    *,
+    provider: str,
+    model: str,
+    candidate_version: str,
+) -> ScoreVersionComparison:
+    rows = (
+        (
+            await session.execute(
+                select(ModelCapabilityScore).where(
+                    ModelCapabilityScore.provider == provider,
+                    ModelCapabilityScore.model == model,
+                    or_(
+                        ModelCapabilityScore.score_version == candidate_version,
+                        ModelCapabilityScore.status == "active",
+                    ),
+                )
+            )
+        )
+        .scalars()
+        .all()
+    )
+    candidates = [score for score in rows if score.score_version == candidate_version]
+    if not candidates:
+        raise ScoreActivationError(
+            "score_version_not_found",
+            f"Candidate score version '{candidate_version}' was not found",
+        )
+    candidate_statuses = {score.status for score in candidates}
+    if len(candidate_statuses) != 1:
+        raise ScoreActivationError(
+            "mixed_score_status", "Candidate score rows have inconsistent statuses"
+        )
+    active = [score for score in rows if score.status == "active"]
+    active_versions = {score.score_version for score in active}
+    if len(active_versions) > 1:
+        raise ScoreActivationError(
+            "multiple_active_versions", "More than one active score version was found"
+        )
+    active_by_key = {
+        (score.task_category, score.difficulty): score for score in active
+    }
+    comparison_rows: list[ScoreComparisonRow] = []
+    for candidate in sorted(
+        candidates, key=lambda item: (item.task_category, item.difficulty)
+    ):
+        current = active_by_key.get((candidate.task_category, candidate.difficulty))
+        comparison_rows.append(
+            ScoreComparisonRow(
+                task_category=candidate.task_category,
+                difficulty=candidate.difficulty,
+                candidate_quality=candidate.quality_score,
+                active_quality=current.quality_score if current else None,
+                quality_delta=(
+                    candidate.quality_score - current.quality_score if current else None
+                ),
+                candidate_samples=candidate.sample_count,
+                candidate_variance=candidate.score_variance,
+                capabilities=tuple(candidate.capabilities),
+            )
+        )
+    return ScoreVersionComparison(
+        provider=provider,
+        model=model,
+        candidate_version=candidate_version,
+        candidate_status=next(iter(candidate_statuses)),
+        active_version=next(iter(active_versions), None),
+        rows=tuple(comparison_rows),
+    )
 
 
 async def change_active_score_set(

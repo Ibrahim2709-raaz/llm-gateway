@@ -15,7 +15,11 @@ from app.evaluations.operations import (
     inspect_evaluation_run,
     seed_smoke_evaluation_dataset,
 )
-from app.evaluations.score_activation import ScoreActivationAction, change_active_score_set
+from app.evaluations.score_activation import (
+    ScoreActivationAction,
+    change_active_score_set,
+    compare_score_version,
+)
 from app.evaluations.service import DatabaseEvaluationService
 
 
@@ -47,6 +51,10 @@ def build_parser() -> argparse.ArgumentParser:
         command.add_argument("--reason")
         command.add_argument("--valid-days", type=int, default=30)
         command.add_argument("--minimum-samples", type=int, default=5)
+    compare = commands.add_parser("compare-scores")
+    compare.add_argument("--provider", required=True)
+    compare.add_argument("--model", required=True)
+    compare.add_argument("--score-version", required=True)
     return parser
 
 
@@ -101,6 +109,15 @@ async def run_command(arguments: argparse.Namespace) -> str:
                     minimum_samples=arguments.minimum_samples,
                 )
             return json.dumps(asdict(activation), indent=2, default=str)
+        if arguments.command == "compare-scores":
+            async with factory() as session:
+                comparison = await compare_score_version(
+                    session,
+                    provider=arguments.provider,
+                    model=arguments.model,
+                    candidate_version=arguments.score_version,
+                )
+            return json.dumps(asdict(comparison), indent=2, default=str)
         async with factory() as session:
             inspection = await inspect_evaluation_run(session, arguments.run_id)
         return json.dumps(asdict(inspection), indent=2, default=str)
