@@ -267,6 +267,30 @@ class ModelCapabilityScore(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     valid_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
 
+class ScoreSetActivation(UUIDPrimaryKeyMixin, Base):
+    __tablename__ = "score_set_activations"
+    __table_args__ = (
+        CheckConstraint(
+            f"action IN ({_sql_values(POLICY_ACTIVATION_ACTIONS)})",
+            name="score_set_activation_action",
+        ),
+    )
+
+    evaluation_run_id: Mapped[UUID] = mapped_column(
+        ForeignKey("evaluation_runs.id", ondelete="RESTRICT"), nullable=False, index=True
+    )
+    provider: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    model: Mapped[str] = mapped_column(String(128), nullable=False, index=True)
+    score_version: Mapped[str] = mapped_column(String(64), nullable=False)
+    previous_score_version: Mapped[str | None] = mapped_column(String(64))
+    action: Mapped[str] = mapped_column(String(32), nullable=False)
+    actor: Mapped[str] = mapped_column(String(200), nullable=False)
+    reason: Mapped[str | None] = mapped_column(String(500))
+    activated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+
 class RoutingPolicyVersion(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     __tablename__ = "routing_policy_versions"
     __table_args__ = (

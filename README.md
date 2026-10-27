@@ -107,6 +107,15 @@ Use `llm-gateway-eval resume <RUN_ID>` after an interrupted run. Each completed
 case is committed independently, so resume skips immutable existing results.
 Publishing scores is allowed only for a fully completed run with no failed cases;
 it creates a draft score version and never activates routing automatically.
+After operator review, activate a sufficiently sampled score version with a
+bounded freshness window:
+
+```bash
+llm-gateway-eval activate-scores --provider openai --model MODEL \
+  --score-version VERSION --actor release-bot --valid-days 30
+llm-gateway-eval rollback-scores --provider openai --model MODEL \
+  --score-version PREVIOUS_VERSION --actor on-call
+```
 
 ## Project documentation
 

@@ -15,6 +15,7 @@ from app.evaluations.operations import (
     inspect_evaluation_run,
     seed_smoke_evaluation_dataset,
 )
+from app.evaluations.score_activation import ScoreActivationAction, change_active_score_set
 from app.evaluations.service import DatabaseEvaluationService
 
 
@@ -37,6 +38,15 @@ def build_parser() -> argparse.ArgumentParser:
     )
     publish.add_argument("run_id", type=UUID)
     publish.add_argument("--score-version", required=True)
+    for command_name in ("activate-scores", "rollback-scores"):
+        command = commands.add_parser(command_name)
+        command.add_argument("--provider", required=True)
+        command.add_argument("--model", required=True)
+        command.add_argument("--score-version", required=True)
+        command.add_argument("--actor", required=True)
+        command.add_argument("--reason")
+        command.add_argument("--valid-days", type=int, default=30)
+        command.add_argument("--minimum-samples", type=int, default=5)
     return parser
 
 
@@ -74,6 +84,23 @@ async def run_command(arguments: argparse.Namespace) -> str:
                     score_version=arguments.score_version,
                 )
             return json.dumps(asdict(score_summary), indent=2, default=str)
+        if arguments.command in {"activate-scores", "rollback-scores"}:
+            action: ScoreActivationAction = (
+                "activate" if arguments.command == "activate-scores" else "rollback"
+            )
+            async with factory.begin() as session:
+                activation = await change_active_score_set(
+                    session,
+                    provider=arguments.provider,
+                    model=arguments.model,
+                    score_version=arguments.score_version,
+                    action=action,
+                    actor=arguments.actor,
+                    reason=arguments.reason,
+                    valid_days=arguments.valid_days,
+                    minimum_samples=arguments.minimum_samples,
+                )
+            return json.dumps(asdict(activation), indent=2, default=str)
         async with factory() as session:
             inspection = await inspect_evaluation_run(session, arguments.run_id)
         return json.dumps(asdict(inspection), indent=2, default=str)

@@ -12,6 +12,7 @@ from app.db.models import (
     RoutingDecisionSnapshot,
     RoutingPolicyActivation,
     RoutingPolicyVersion,
+    ScoreSetActivation,
     UsageRecord,
 )
 
@@ -30,6 +31,7 @@ def test_initial_database_tables_are_registered() -> None:
         RoutingDecisionSnapshot.__tablename__,
         RoutingPolicyActivation.__tablename__,
         RoutingPolicyVersion.__tablename__,
+        ScoreSetActivation.__tablename__,
         UsageRecord.__tablename__,
     }
 
@@ -106,4 +108,20 @@ def test_policy_activations_are_audited_without_secrets() -> None:
     columns = set(RoutingPolicyActivation.__table__.columns.keys())
 
     assert {"policy_id", "previous_policy_id", "action", "actor", "reason"} <= columns
+    assert "api_key" not in columns
+
+
+def test_score_activations_are_audited_without_credentials() -> None:
+    columns = set(ScoreSetActivation.__table__.columns.keys())
+
+    assert {
+        "evaluation_run_id",
+        "provider",
+        "model",
+        "score_version",
+        "previous_score_version",
+        "action",
+        "actor",
+        "reason",
+    } <= columns
     assert "api_key" not in columns
