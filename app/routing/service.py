@@ -1,4 +1,3 @@
-import re
 from dataclasses import dataclass
 from decimal import Decimal
 
@@ -6,13 +5,10 @@ from fastapi import status
 
 from app.core.errors import GatewayError
 from app.providers.base import ChatProvider, ModelRoutingProfile, TaskComplexity
+from app.routing.classifier import TaskClassification, classify_request, estimate_prompt_tokens
 from app.schemas.chat import ChatCompletionRequest
 
 COMPLEXITY_LEVEL = {"simple": 1, "medium": 2, "complex": 3}
-COMPLEX_TASK_PATTERN = re.compile(
-    r"\b(debug|prove|proof|architecture|algorithm|optimi[sz]e|root cause|step[- ]by[- ]step)\b",
-    re.IGNORECASE,
-)
 
 
 @dataclass(frozen=True, slots=True)
@@ -32,23 +28,11 @@ class RoutingCandidate:
 class RoutingPlan:
     candidates: tuple[RoutingCandidate, ...]
     task_complexity: TaskComplexity
-
-
-def estimate_prompt_tokens(request: ChatCompletionRequest) -> int:
-    character_count = sum(
-        len(message.role) + len(message.content) + 2 for message in request.messages
-    )
-    return max(1, (character_count + 3) // 4)
+    classification: TaskClassification
 
 
 def classify_task(request: ChatCompletionRequest) -> TaskComplexity:
-    prompt = "\n".join(message.content for message in request.messages)
-    prompt_tokens = estimate_prompt_tokens(request)
-    if prompt_tokens >= 800 or len(request.messages) >= 8 or COMPLEX_TASK_PATTERN.search(prompt):
-        return "complex"
-    if prompt_tokens >= 200 or len(request.messages) >= 4:
-        return "medium"
-    return "simple"
+    return classify_request(request).difficulty.value
 
 
 def estimate_max_cost(request: ChatCompletionRequest, profile: ModelRoutingProfile) -> Decimal:
@@ -71,7 +55,8 @@ class ProviderRouter:
         )
 
     def plan(self, request: ChatCompletionRequest) -> RoutingPlan:
-        task_complexity = classify_task(request)
+        classification = classify_request(request)
+        task_complexity: TaskComplexity = classification.difficulty.value
         known_model = any(provider.model == request.model for provider in self.providers)
         if request.model != "auto" and not known_model:
             raise GatewayError(
@@ -106,6 +91,7 @@ class ProviderRouter:
         return RoutingPlan(
             candidates=tuple(ranked_candidates),
             task_complexity=task_complexity,
+            classification=classification,
         )
 
     def _eligible_candidates(

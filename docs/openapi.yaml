@@ -300,6 +300,10 @@ components:
         - cached
         - routing_strategy
         - task_complexity
+        - task_category
+        - classification_confidence
+        - classifier_version
+        - classification_reasons
         - estimated_cost_usd
         - attempts
       properties:
@@ -320,6 +324,20 @@ components:
         task_complexity:
           type: string
           enum: [simple, medium, complex]
+        task_category:
+          type: string
+          enum: [coding, reasoning, summarization, extraction, general_chat]
+        classification_confidence:
+          type: number
+          format: double
+          minimum: 0
+          maximum: 1
+        classifier_version:
+          type: string
+        classification_reasons:
+          type: array
+          items:
+            type: string
         estimated_cost_usd:
           type: number
           format: double

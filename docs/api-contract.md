@@ -180,6 +180,13 @@ retryable routes return `502 provider_error`.
     "cached": false,
     "routing_strategy": "balanced",
     "task_complexity": "medium",
+    "task_category": "reasoning",
+    "classification_confidence": 0.86,
+    "classifier_version": "task-rules-v1",
+    "classification_reasons": [
+      "category_reasoning_signal",
+      "difficulty_medium_signal"
+    ],
     "estimated_cost_usd": 0.004862,
     "attempts": [
       {
@@ -206,6 +213,8 @@ retryable routes return `502 provider_error`.
 input tokens and the requested maximum output. `cost_usd` is the actual
 provider-reported usage cost. Only sanitized attempt information is returned;
 internal exception messages and provider credentials are never exposed.
+Classification explanations contain only versioned reason codes and never copy
+prompt text into response metadata.
 
 ## Usage summary
 

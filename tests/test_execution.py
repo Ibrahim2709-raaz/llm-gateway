@@ -14,6 +14,7 @@ from app.providers.base import (
     ProviderTimeoutError,
     ProviderUnavailableError,
 )
+from app.routing.classifier import classify_request
 from app.routing.service import RoutingCandidate, RoutingPlan
 from app.schemas.chat import ChatCompletionRequest, ChatMessage
 
@@ -57,6 +58,7 @@ def plan(*providers: SequenceProvider) -> RoutingPlan:
             for provider in providers
         ),
         task_complexity="simple",
+        classification=classify_request(request()),
     )
 
 

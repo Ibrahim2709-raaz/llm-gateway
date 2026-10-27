@@ -86,8 +86,9 @@ llm-gateway-classify "Summarize this Python function and list the key points"
 llm-gateway-classifier-eval --split heldout
 ```
 
-The classifier is review-only at this checkpoint and does not change live model
-selection. It will enter routing only after the labeled validation gate passes.
+The classifier passed the initial labeled validation gate and now supplies task
+difficulty to automatic routing plus safe classification metadata in responses.
+Explicit-model requests remain exempt from automatic difficulty filtering.
 The versioned dataset and thresholds are documented in
 [the classifier dataset card](docs/classifier-dataset.md).
 
