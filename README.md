@@ -58,6 +58,19 @@ evaluation-driven model-selection system. Work will follow the committed
 5. Validate decisions in shadow mode before gradual production rollout.
 6. Explain model selections in API metadata and Grafana dashboards.
 
+On the intelligent-routing development branch, operators can initialize and
+inspect the versioned foundation without exposing it through a customer API:
+
+```bash
+alembic upgrade head
+llm-gateway-routing-foundation seed
+llm-gateway-routing-foundation show
+```
+
+The seed is idempotent. It records the released `baseline-v1` policy and creates
+the initial task-taxonomy dataset in draft state; it does not store production
+prompts or invent capability scores before evaluations exist.
+
 ## Project documentation
 
 - [MVP scope and acceptance criteria](docs/mvp-scope.md)
