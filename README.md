@@ -5,7 +5,7 @@
 A multi-provider LLM API gateway that routes requests according to cost, latency,
 availability, and task complexity.
 
-## Planned capabilities
+## Version 0.1 capabilities
 
 - OpenAI-compatible chat-completions API
 - OpenAI, Anthropic, and local-model providers
@@ -17,7 +17,7 @@ availability, and task complexity.
 - Prometheus metrics and Grafana dashboards
 - Docker-based local development environment
 
-## Proposed stack
+## Stack
 
 - Python and FastAPI
 - PostgreSQL
@@ -25,16 +25,14 @@ availability, and task complexity.
 - Docker Compose
 - Prometheus and Grafana
 
-## Development status
+## Release status
 
-Development stages 1 through 11 are complete, and stage 12 (deployment and
-documentation) is underway. The gateway implements the unified API, OpenAI,
-Anthropic, local OpenAI-compatible, and mock providers, API-key authentication,
-distributed rate limiting, intelligent routing, retries and fallback, response
-caching, usage budgets, cost tracking, Prometheus metrics, a provisioned
-Grafana dashboard, production-oriented API hardening, automated CI, and a
-full-stack release smoke test. The full production-ready project is now
-approximately 98% complete.
+Version 0.1 is the stable gateway baseline. It implements the unified API,
+OpenAI, Anthropic, local OpenAI-compatible, and mock providers, API-key
+authentication, distributed rate limiting, rule-based routing, retries and
+fallback, response caching, usage budgets, cost tracking, Prometheus metrics, a
+provisioned Grafana dashboard, production-oriented API hardening, automated CI,
+and a full-stack release smoke test.
 
 The reliability layer includes a process-local provider circuit breaker that
 stops retrying an unhealthy model, routes immediately to the next candidate
@@ -43,10 +41,22 @@ normal traffic. The API also enforces a request-body ceiling, adds defensive
 response headers, validates trusted hosts, and disables interactive API
 documentation in production.
 
-GitHub Actions now validates every pull request and every push to `main` by
-running Ruff, mypy, the full coverage-enforced pytest suite, and a Docker image
-build. The remaining release work is to run the new clean-checkout release gate
-in GitHub Actions and perform final release verification.
+GitHub Actions validates every pull request and every push to `main` by running
+Ruff, mypy, the full coverage-enforced pytest suite, a Docker image build, and a
+clean-checkout multi-customer smoke test.
+
+## Next phase: evidence-driven intelligent routing
+
+The next development phase evolves the rule-based router into a task-aware,
+evaluation-driven model-selection system. Work will follow the committed
+[intelligent model routing roadmap](docs/intelligent-routing-roadmap.md):
+
+1. Define a versioned task taxonomy and routing data model.
+2. Classify requests by task category, difficulty, and confidence.
+3. Benchmark each model with reproducible category-specific evaluations.
+4. Route using measured quality together with cost, latency, and reliability.
+5. Validate decisions in shadow mode before gradual production rollout.
+6. Explain model selections in API metadata and Grafana dashboards.
 
 ## Project documentation
 

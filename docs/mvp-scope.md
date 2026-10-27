@@ -129,7 +129,7 @@ These features are valuable, but they will not block the first release:
 
 The MVP is complete when all of the following are demonstrated:
 
-- [ ] The stack starts from a clean checkout with documented commands.
+- [x] The stack starts from a clean checkout with documented commands.
 - [x] A valid API key can make a chat-completion request.
 - [x] An invalid or revoked API key receives `401 Unauthorized`.
 - [x] Two customers have independent rate limits, caches, and budgets.
