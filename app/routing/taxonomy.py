@@ -1,0 +1,42 @@
+from enum import StrEnum
+
+
+class TaskCategory(StrEnum):
+    CODING = "coding"
+    REASONING = "reasoning"
+    SUMMARIZATION = "summarization"
+    EXTRACTION = "extraction"
+    GENERAL_CHAT = "general_chat"
+
+
+class TaskDifficulty(StrEnum):
+    SIMPLE = "simple"
+    MEDIUM = "medium"
+    COMPLEX = "complex"
+
+
+class ModelCapability(StrEnum):
+    TEXT_GENERATION = "text_generation"
+    STRUCTURED_OUTPUT = "structured_output"
+    TOOL_USE = "tool_use"
+    RETRIEVAL = "retrieval"
+
+
+class VersionStatus(StrEnum):
+    DRAFT = "draft"
+    ACTIVE = "active"
+    RETIRED = "retired"
+
+
+class EvaluationRunStatus(StrEnum):
+    PENDING = "pending"
+    RUNNING = "running"
+    COMPLETED = "completed"
+    FAILED = "failed"
+
+
+TASK_CATEGORIES = tuple(category.value for category in TaskCategory)
+TASK_DIFFICULTIES = tuple(difficulty.value for difficulty in TaskDifficulty)
+MODEL_CAPABILITIES = tuple(capability.value for capability in ModelCapability)
+VERSION_STATUSES = tuple(status.value for status in VersionStatus)
+EVALUATION_RUN_STATUSES = tuple(status.value for status in EvaluationRunStatus)
