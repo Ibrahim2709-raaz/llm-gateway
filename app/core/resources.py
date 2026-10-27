@@ -108,3 +108,14 @@ def create_resources(settings: Settings) -> AppResources:
             recovery_seconds=settings.provider_circuit_breaker_recovery_seconds,
         ),
     )
+
+
+async def close_resources(resources: AppResources) -> None:
+    if resources.openai_client is not None:
+        await resources.openai_client.close()
+    if resources.anthropic_client is not None:
+        await resources.anthropic_client.close()
+    if resources.local_client is not None:
+        await resources.local_client.close()
+    await resources.redis.aclose()
+    await resources.database_engine.dispose()

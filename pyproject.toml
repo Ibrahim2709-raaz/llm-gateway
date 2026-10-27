@@ -35,6 +35,7 @@ dev = [
 llm-gateway-create-key = "app.cli.create_api_key:main"
 llm-gateway-classify = "app.cli.classify_request:main"
 llm-gateway-classifier-eval = "app.cli.evaluate_classifier:main"
+llm-gateway-eval = "app.cli.evaluation_harness:main"
 llm-gateway-routing-foundation = "app.cli.routing_foundation:main"
 llm-gateway-set-budget = "app.cli.set_budget:main"
 

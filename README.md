@@ -92,6 +92,19 @@ Explicit-model requests remain exempt from automatic difficulty filtering.
 The versioned dataset and thresholds are documented in
 [the classifier dataset card](docs/classifier-dataset.md).
 
+The evaluation harness can be demonstrated without paid provider credentials:
+
+```bash
+alembic upgrade head
+llm-gateway-eval seed-smoke
+llm-gateway-eval create --provider mock --model mock-1
+llm-gateway-eval run <RUN_ID>
+llm-gateway-eval show <RUN_ID>
+```
+
+Use `llm-gateway-eval resume <RUN_ID>` after an interrupted run. Each completed
+case is committed independently, so resume skips immutable existing results.
+
 ## Project documentation
 
 - [MVP scope and acceptance criteria](docs/mvp-scope.md)
