@@ -155,10 +155,12 @@ async def test_intelligent_routing_uses_versioned_evidence_metadata() -> None:
     )
     repository = AsyncMock(spec=DatabaseRoutingEvidenceRepository)
     repository.load_active.return_value = RoutingEvidenceSnapshot(policy, (score,))
+    metrics = Mock()
     service = ChatCompletionService(
         (provider,),
         intelligent_routing_enabled=True,
         evidence_repository=repository,
+        metrics=metrics,
     )
 
     result = await service.create(make_request(), uuid4(), uuid4())
@@ -167,6 +169,14 @@ async def test_intelligent_routing_uses_versioned_evidence_metadata() -> None:
     assert result.gateway.score_version == "scores-v2"
     assert result.gateway.evaluated_quality == 0.91
     assert result.gateway.routing_reasons == ["evaluated_quality"]
+    metrics.record_intelligent_route.assert_called_once_with(
+        provider.name,
+        provider.model,
+        "general_chat",
+        "balanced",
+        "policy-v2",
+        "scores-v2",
+    )
 
 
 @pytest.mark.anyio
@@ -233,10 +243,12 @@ async def test_shadow_routing_never_changes_baseline_execution() -> None:
         policy,
         (evidence(baseline_winner, "0.50"), evidence(evidence_winner, "0.99")),
     )
+    metrics = Mock()
     service = ChatCompletionService(
         (baseline_winner, evidence_winner),  # type: ignore[arg-type]
         intelligent_routing_shadow_enabled=True,
         evidence_repository=repository,
+        metrics=metrics,
     )
 
     result = await service.create(make_request(), uuid4(), uuid4())
@@ -246,6 +258,11 @@ async def test_shadow_routing_never_changes_baseline_execution() -> None:
     assert baseline_winner.calls == 1
     assert evidence_winner.calls == 0
     repository.load_active.assert_awaited_once()
+    shadow_call = metrics.record_shadow_decision.call_args.args
+    assert shadow_call[0] == "disagreement"
+    assert shadow_call[1] == "general_chat"
+    assert 0 <= shadow_call[2] <= 1
+    assert shadow_call[3:] == ("policy-v2", "scores-v2")
 
 
 @pytest.mark.anyio

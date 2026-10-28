@@ -85,6 +85,54 @@
       "targets": [{"expr": "sum by (decision) (rate(llm_gateway_rate_limit_decisions_total[5m]))", "legendFormat": "{{decision}}", "refId": "A"}],
       "title": "Rate-limit decisions",
       "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "fieldConfig": {"defaults": {"unit": "percentunit", "min": 0, "max": 1}},
+      "gridPos": {"h": 5, "w": 6, "x": 0, "y": 20},
+      "id": 10,
+      "options": {"colorMode": "value", "graphMode": "area", "textMode": "auto"},
+      "targets": [{"expr": "sum(rate(llm_gateway_shadow_decisions_total{result=\"agreement\"}[5m])) / clamp_min(sum(rate(llm_gateway_shadow_decisions_total{result=~\"agreement|disagreement\"}[5m])), 1e-9)", "refId": "A"}],
+      "title": "Shadow agreement rate",
+      "type": "stat"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "fieldConfig": {"defaults": {"unit": "percentunit", "min": 0, "max": 1}},
+      "gridPos": {"h": 5, "w": 6, "x": 6, "y": 20},
+      "id": 11,
+      "options": {"colorMode": "value", "graphMode": "area", "textMode": "auto"},
+      "targets": [
+        {"expr": "histogram_quantile(0.50, sum by (le) (rate(llm_gateway_classifier_confidence_bucket[5m])))", "legendFormat": "P50", "refId": "A"},
+        {"expr": "histogram_quantile(0.95, sum by (le) (rate(llm_gateway_classifier_confidence_bucket[5m])))", "legendFormat": "P95", "refId": "B"}
+      ],
+      "title": "Classifier confidence",
+      "type": "stat"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "fieldConfig": {"defaults": {"unit": "short"}},
+      "gridPos": {"h": 5, "w": 12, "x": 12, "y": 20},
+      "id": 12,
+      "targets": [{"expr": "sum by (policy_version, score_version) (increase(llm_gateway_shadow_decisions_total[$__range]))", "legendFormat": "{{policy_version}} / {{score_version}}", "refId": "A"}],
+      "title": "Shadow evidence versions",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "gridPos": {"h": 8, "w": 8, "x": 0, "y": 25},
+      "id": 13,
+      "targets": [{"expr": "sum by (result, task_category) (rate(llm_gateway_shadow_decisions_total[5m]))", "legendFormat": "{{result}} / {{task_category}}", "refId": "A"}],
+      "title": "Shadow decisions by task",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "gridPos": {"h": 8, "w": 16, "x": 8, "y": 25},
+      "id": 14,
+      "targets": [{"expr": "sum by (provider, model, task_category, strategy) (rate(llm_gateway_intelligent_routes_total[5m]))", "legendFormat": "{{provider}} / {{model}} / {{task_category}} / {{strategy}}", "refId": "A"}],
+      "title": "Intelligent model selections",
+      "type": "timeseries"
     }
   ],
   "refresh": "15s",
@@ -95,5 +143,5 @@
   "timezone": "browser",
   "title": "LLM Gateway Overview",
   "uid": "llm-gateway-overview",
-  "version": 1
+  "version": 2
 }

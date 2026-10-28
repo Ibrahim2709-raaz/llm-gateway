@@ -344,6 +344,13 @@ activity, cache hit rate, rate-limit decisions, token throughput, and cost. Its
 metrics use bounded provider/model/outcome labels and never include customer
 IDs, request IDs, prompts, credentials, or response content.
 
+When intelligent routing shadow mode is enabled, the same dashboard also shows
+baseline-versus-intelligent agreement, classifier confidence, task-category
+distribution, and the exact policy and score versions being evaluated. When
+live intelligent routing is enabled, it shows model selections by task and
+strategy. These routing metrics keep bounded operational labels and do not
+contain prompts or customer identifiers.
+
 ### Run the end-to-end smoke test
 
 With the stack running, create a dedicated test key and pass it to the

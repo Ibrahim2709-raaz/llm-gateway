@@ -23,6 +23,25 @@ class MetricsRecorder(Protocol):
 
     def record_rate_limit(self, decision: str) -> None: ...
 
+    def record_shadow_decision(
+        self,
+        result: str,
+        task_category: str,
+        confidence: float,
+        policy_version: str,
+        score_version: str,
+    ) -> None: ...
+
+    def record_intelligent_route(
+        self,
+        provider: str,
+        model: str,
+        task_category: str,
+        strategy: str,
+        policy_version: str,
+        score_version: str,
+    ) -> None: ...
+
 
 class GatewayMetrics:
     def __init__(self, registry: CollectorRegistry = REGISTRY) -> None:
@@ -76,6 +95,32 @@ class GatewayMetrics:
             ("decision",),
             registry=registry,
         )
+        self.shadow_decisions = Counter(
+            "llm_gateway_shadow_decisions_total",
+            "Shadow routing comparisons by result and versioned task context.",
+            ("result", "task_category", "policy_version", "score_version"),
+            registry=registry,
+        )
+        self.classifier_confidence = Histogram(
+            "llm_gateway_classifier_confidence",
+            "Classifier confidence observed during shadow routing.",
+            ("task_category",),
+            buckets=(0.0, 0.25, 0.5, 0.65, 0.75, 0.85, 0.95, 1.0),
+            registry=registry,
+        )
+        self.intelligent_routes = Counter(
+            "llm_gateway_intelligent_routes_total",
+            "Executed intelligent routes by model, task, strategy, and evidence versions.",
+            (
+                "provider",
+                "model",
+                "task_category",
+                "strategy",
+                "policy_version",
+                "score_version",
+            ),
+            registry=registry,
+        )
 
     def record_gateway_request(self, outcome: str, duration_seconds: float) -> None:
         self.gateway_requests.labels(outcome=outcome).inc()
@@ -111,6 +156,42 @@ class GatewayMetrics:
 
     def record_rate_limit(self, decision: str) -> None:
         self.rate_limit_decisions.labels(decision=decision).inc()
+
+    def record_shadow_decision(
+        self,
+        result: str,
+        task_category: str,
+        confidence: float,
+        policy_version: str,
+        score_version: str,
+    ) -> None:
+        self.shadow_decisions.labels(
+            result=result,
+            task_category=task_category,
+            policy_version=policy_version,
+            score_version=score_version,
+        ).inc()
+        self.classifier_confidence.labels(task_category=task_category).observe(
+            min(1.0, max(0.0, confidence))
+        )
+
+    def record_intelligent_route(
+        self,
+        provider: str,
+        model: str,
+        task_category: str,
+        strategy: str,
+        policy_version: str,
+        score_version: str,
+    ) -> None:
+        self.intelligent_routes.labels(
+            provider=provider,
+            model=model,
+            task_category=task_category,
+            strategy=strategy,
+            policy_version=policy_version,
+            score_version=score_version,
+        ).inc()
 
     def render(self) -> bytes:
         return generate_latest(self.registry)

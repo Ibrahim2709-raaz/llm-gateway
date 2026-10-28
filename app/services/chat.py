@@ -185,6 +185,15 @@ class ChatCompletionService:
                 float(result.cost_usd),
             )
         self._record_gateway_request("success", latency_ms / 1000)
+        if self.intelligent_routing_enabled and self.metrics is not None:
+            self.metrics.record_intelligent_route(
+                provider.name,
+                result.model,
+                routing_plan.classification.category.value,
+                routing_strategy,
+                routing_plan.policy_version,
+                execution.candidate.score_version,
+            )
 
         response = ChatCompletionResponse(
             id=f"chatcmpl_{uuid4().hex}",
@@ -308,11 +317,31 @@ class ChatCompletionService:
                 score_version=snapshot.policy.score_version,
                 candidate_count=len(shadow.candidates),
             )
+            if self.metrics is not None:
+                shadow_result = (
+                    "no_candidate"
+                    if shadow_primary is None
+                    else (
+                        "agreement"
+                        if shadow_primary.provider.name == baseline_primary.provider.name
+                        and shadow_primary.provider.model == baseline_primary.provider.model
+                        else "disagreement"
+                    )
+                )
+                self.metrics.record_shadow_decision(
+                    shadow_result,
+                    classification.category.value,
+                    classification.confidence,
+                    snapshot.policy.version,
+                    snapshot.policy.score_version,
+                )
         except Exception as exc:
             logger.warning(
                 "intelligent_shadow_skipped",
                 reason=type(exc).__name__,
             )
+            if self.metrics is not None:
+                self.metrics.record_shadow_decision("skipped", "unknown", 0, "unknown", "unknown")
 
     async def _record_failed_usage(
         self,
