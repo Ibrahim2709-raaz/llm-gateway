@@ -35,6 +35,8 @@ class Settings(BaseSettings):
     intelligent_routing_shadow_enabled: bool = False
     intelligent_routing_canary_percent: int = Field(default=100, ge=0, le=100)
     intelligent_routing_customer_allowlist: str = ""
+    intelligent_routing_required_policy_version: str | None = None
+    intelligent_routing_required_score_version: str | None = None
     max_request_body_bytes: int = Field(default=1_048_576, ge=1_024, le=52_428_800)
     trusted_hosts: str = "*"
     gateway_api_key_pepper: SecretStr = SecretStr(DEFAULT_DEVELOPMENT_API_KEY_PEPPER)
@@ -94,6 +96,17 @@ class Settings(BaseSettings):
                 "INTELLIGENT_ROUTING_ENABLED and INTELLIGENT_ROUTING_SHADOW_ENABLED "
                 "cannot both be true"
             )
+        controlled_rollout = (
+            self.intelligent_routing_canary_percent < 100
+            or bool(self.intelligent_routing_customer_allowlist.strip())
+        )
+        if self.intelligent_routing_enabled and controlled_rollout and (
+            not self.intelligent_routing_required_policy_version
+            or not self.intelligent_routing_required_score_version
+        ):
+            raise ValueError(
+                "Controlled intelligent routing requires pinned policy and score versions"
+            )
         if (
             self.app_env == "production"
             and self.gateway_api_key_pepper.get_secret_value() == DEFAULT_DEVELOPMENT_API_KEY_PEPPER
@@ -111,6 +124,17 @@ class Settings(BaseSettings):
         for item in value.split(","):
             if item.strip():
                 UUID(item.strip())
+        return value
+
+    @field_validator(
+        "intelligent_routing_required_policy_version",
+        "intelligent_routing_required_score_version",
+        mode="before",
+    )
+    @classmethod
+    def normalize_optional_routing_version(cls, value: object) -> object:
+        if isinstance(value, str):
+            return value.strip() or None
         return value
 
     @property

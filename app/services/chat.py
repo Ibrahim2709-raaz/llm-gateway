@@ -53,6 +53,8 @@ class ChatCompletionService:
         intelligent_routing_enabled: bool = False,
         intelligent_routing_shadow_enabled: bool = False,
         intelligent_routing_rollout: IntelligentRoutingRollout | None = None,
+        intelligent_routing_required_policy_version: str | None = None,
+        intelligent_routing_required_score_version: str | None = None,
         evidence_repository: DatabaseRoutingEvidenceRepository | None = None,
         clock: Callable[[], float] = time.perf_counter,
     ) -> None:
@@ -61,6 +63,10 @@ class ChatCompletionService:
         self.intelligent_routing_enabled = intelligent_routing_enabled
         self.intelligent_routing_shadow_enabled = intelligent_routing_shadow_enabled
         self.intelligent_routing_rollout = intelligent_routing_rollout
+        self.intelligent_routing_required_policy_version = (
+            intelligent_routing_required_policy_version
+        )
+        self.intelligent_routing_required_score_version = intelligent_routing_required_score_version
         self.evidence_repository = evidence_repository
         if intelligent_routing_enabled and intelligent_routing_shadow_enabled:
             raise ValueError("Live and shadow intelligent routing cannot both be enabled")
@@ -264,6 +270,20 @@ class ChatCompletionService:
                 error_type="service_unavailable_error",
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             ) from exc
+        if (
+            self.intelligent_routing_required_policy_version is not None
+            and snapshot.policy.version != self.intelligent_routing_required_policy_version
+        ) or (
+            self.intelligent_routing_required_score_version is not None
+            and snapshot.policy.score_version
+            != self.intelligent_routing_required_score_version
+        ):
+            raise GatewayError(
+                "Active routing evidence does not match the versions pinned for this rollout.",
+                code="routing_evidence_version_mismatch",
+                error_type="service_unavailable_error",
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            )
         classification = classify_request(request)
         evidence_plan = EvidenceDrivenRouter(self.providers).plan(
             request,

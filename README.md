@@ -132,6 +132,10 @@ For a controlled live rollout, keep `INTELLIGENT_ROUTING_ENABLED=true` and set
 customer, so the same customer does not switch cohorts between requests.
 `INTELLIGENT_ROUTING_CUSTOMER_ALLOWLIST` accepts comma-separated client UUIDs
 for internal or explicitly approved customers regardless of the percentage.
+Controlled rollouts must also set `INTELLIGENT_ROUTING_REQUIRED_POLICY_VERSION`
+and `INTELLIGENT_ROUTING_REQUIRED_SCORE_VERSION`. The gateway fails closed if
+the active database evidence differs from either pin, preventing an evaluation
+activation from silently changing an in-progress canary.
 Setting the global enabled flag to `false` immediately returns every customer
 to `baseline-v1` without changing active evaluation evidence.
 Live-canary requests bypass the response cache so a response produced under a

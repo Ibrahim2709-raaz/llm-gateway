@@ -73,6 +73,26 @@ def test_intelligent_routing_customer_allowlist_rejects_invalid_uuid() -> None:
         )
 
 
+def test_controlled_live_rollout_requires_pinned_evidence_versions() -> None:
+    with pytest.raises(ValidationError, match="requires pinned policy and score versions"):
+        Settings(
+            _env_file=None,
+            intelligent_routing_enabled=True,
+            intelligent_routing_canary_percent=5,
+        )
+
+    settings = Settings(
+        _env_file=None,
+        intelligent_routing_enabled=True,
+        intelligent_routing_canary_percent=5,
+        intelligent_routing_required_policy_version="policy-v2",
+        intelligent_routing_required_score_version="scores-v2",
+    )
+
+    assert settings.intelligent_routing_required_policy_version == "policy-v2"
+    assert settings.intelligent_routing_required_score_version == "scores-v2"
+
+
 def test_openai_requires_a_nonempty_key_when_enabled() -> None:
     with pytest.raises(ValidationError):
         Settings(_env_file=None, openai_enabled=True, openai_api_key="")

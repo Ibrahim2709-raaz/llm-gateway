@@ -48,6 +48,12 @@ def get_chat_service(
             percentage=settings.intelligent_routing_canary_percent,
             customer_allowlist=settings.intelligent_routing_customer_ids,
         ),
+        intelligent_routing_required_policy_version=(
+            settings.intelligent_routing_required_policy_version
+        ),
+        intelligent_routing_required_score_version=(
+            settings.intelligent_routing_required_score_version
+        ),
         evidence_repository=(
             DatabaseRoutingEvidenceRepository(session)
             if (

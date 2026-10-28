@@ -215,6 +215,36 @@ async def test_intelligent_routing_fails_safely_without_eligible_evidence() -> N
 
 
 @pytest.mark.anyio
+async def test_intelligent_routing_fails_closed_when_evidence_versions_do_not_match() -> None:
+    provider = SuccessfulProvider()
+    policy = RoutingPolicyVersion(
+        version="policy-v3",
+        status="active",
+        classifier_version="task-rules-v1",
+        score_version="scores-v3",
+        strategy_weights={},
+        minimum_quality={},
+        minimum_sample_count=5,
+        cold_start_mode="exclude",
+    )
+    repository = AsyncMock(spec=DatabaseRoutingEvidenceRepository)
+    repository.load_active.return_value = RoutingEvidenceSnapshot(policy, ())
+    service = ChatCompletionService(
+        (provider,),
+        intelligent_routing_enabled=True,
+        intelligent_routing_required_policy_version="policy-v2",
+        intelligent_routing_required_score_version="scores-v2",
+        evidence_repository=repository,
+    )
+
+    with pytest.raises(GatewayError) as captured:
+        await service.create(make_request(), uuid4(), uuid4())
+
+    assert captured.value.status_code == 503
+    assert captured.value.code == "routing_evidence_version_mismatch"
+
+
+@pytest.mark.anyio
 async def test_intelligent_routing_canary_exclusion_uses_baseline_without_loading_evidence(
 ) -> None:
     provider = SuccessfulProvider()
