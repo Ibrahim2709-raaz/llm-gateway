@@ -61,3 +61,34 @@ groups:
         annotations:
           summary: More than 90% of intelligent traffic is concentrated on one model
           runbook_url: https://github.com/Ibrahim2709-raaz/llm-gateway/blob/main/docs/intelligent-routing-operations.md#routing-concentration-increases
+
+      - alert: LLMGatewayRoutingEvidenceExpiringSoon
+        expr: |
+          llm_gateway_routing_evidence_expiration_timestamp_seconds - time() >= 0
+          and
+          llm_gateway_routing_evidence_expiration_timestamp_seconds - time() < 86400
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: Active intelligent-routing evidence expires within 24 hours
+          runbook_url: https://github.com/Ibrahim2709-raaz/llm-gateway/blob/main/docs/intelligent-routing-operations.md#routing-evidence-is-expiring
+
+      - alert: LLMGatewayIntelligentCostEstimateDrift
+        expr: |
+          abs(
+            sum(rate(llm_gateway_intelligent_estimated_cost_usd_total[15m]))
+            -
+            sum(rate(llm_gateway_intelligent_actual_cost_usd_total[15m]))
+          )
+          /
+          clamp_min(sum(rate(llm_gateway_intelligent_actual_cost_usd_total[15m])), 1e-9)
+          > 0.25
+          and
+          sum(increase(llm_gateway_intelligent_actual_cost_usd_total[15m])) > 0.01
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: Intelligent-routing estimated cost differs from actual cost by over 25%
+          runbook_url: https://github.com/Ibrahim2709-raaz/llm-gateway/blob/main/docs/intelligent-routing-operations.md#cost-estimate-drift-increases

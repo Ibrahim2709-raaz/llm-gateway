@@ -28,5 +28,7 @@ def test_routing_alerts_have_unique_names_and_runbooks() -> None:
         "LLMGatewayShadowEvaluationSkipped",
         "LLMGatewayShadowLowAgreement",
         "LLMGatewayRoutingConcentration",
+        "LLMGatewayRoutingEvidenceExpiringSoon",
+        "LLMGatewayIntelligentCostEstimateDrift",
     } <= set(names)
     assert all(rule["annotations"]["runbook_url"].startswith("https://") for rule in alerts)

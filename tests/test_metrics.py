@@ -16,8 +16,16 @@ def test_gateway_metrics_export_bounded_operational_labels() -> None:
     metrics.record_rate_limit("allowed")
     metrics.record_shadow_decision("agreement", "coding", 0.9, "policy-v2", "scores-v2")
     metrics.record_intelligent_route(
-        "openai", "example-model", "coding", "quality", "policy-v2", "scores-v2"
+        "openai",
+        "example-model",
+        "coding",
+        "quality",
+        "policy-v2",
+        "scores-v2",
+        0.003,
+        0.0025,
     )
+    metrics.record_routing_evidence("policy-v2", "scores-v2", 1_800_000_000)
 
     assert registry.get_sample_value("llm_gateway_requests_total", {"outcome": "success"}) == 1
     assert (
@@ -73,6 +81,27 @@ def test_gateway_metrics_export_bounded_operational_labels() -> None:
             },
         )
         == 1
+    )
+    assert (
+        registry.get_sample_value(
+            "llm_gateway_intelligent_estimated_cost_usd_total",
+            {"provider": "openai", "model": "example-model", "strategy": "quality"},
+        )
+        == 0.003
+    )
+    assert (
+        registry.get_sample_value(
+            "llm_gateway_intelligent_actual_cost_usd_total",
+            {"provider": "openai", "model": "example-model", "strategy": "quality"},
+        )
+        == 0.0025
+    )
+    assert (
+        registry.get_sample_value(
+            "llm_gateway_routing_evidence_expiration_timestamp_seconds",
+            {"policy_version": "policy-v2", "score_version": "scores-v2"},
+        )
+        == 1_800_000_000
     )
     rendered = metrics.render().decode()
     assert "llm_gateway_request_duration_seconds_bucket" in rendered

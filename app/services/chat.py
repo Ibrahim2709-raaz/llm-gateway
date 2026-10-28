@@ -21,6 +21,7 @@ from app.routing.intelligent import EvidenceDrivenRouter
 from app.routing.repository import (
     DatabaseRoutingEvidenceRepository,
     RoutingEvidenceError,
+    RoutingEvidenceSnapshot,
 )
 from app.routing.rollout import IntelligentRoutingRollout
 from app.routing.service import ProviderRouter, RoutingCandidate, RoutingPlan
@@ -207,6 +208,8 @@ class ChatCompletionService:
                 routing_strategy,
                 routing_plan.policy_version,
                 execution.candidate.score_version,
+                float(execution.candidate.estimated_cost_usd),
+                float(result.cost_usd),
             )
 
         response = ChatCompletionResponse(
@@ -270,6 +273,7 @@ class ChatCompletionService:
                 error_type="service_unavailable_error",
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             ) from exc
+        self._record_evidence_freshness(snapshot)
         if (
             self.intelligent_routing_required_policy_version is not None
             and snapshot.policy.version != self.intelligent_routing_required_policy_version
@@ -329,6 +333,7 @@ class ChatCompletionService:
             return
         try:
             snapshot = await self.evidence_repository.load_active()
+            self._record_evidence_freshness(snapshot)
             classification = classify_request(request)
             shadow = EvidenceDrivenRouter(self.providers).plan(
                 request,
@@ -380,6 +385,18 @@ class ChatCompletionService:
             )
             if self.metrics is not None:
                 self.metrics.record_shadow_decision("skipped", "unknown", 0, "unknown", "unknown")
+
+    def _record_evidence_freshness(self, snapshot: RoutingEvidenceSnapshot) -> None:
+        if self.metrics is None:
+            return
+        expiries = [score.valid_until for score in snapshot.scores if score.valid_until]
+        if not expiries:
+            return
+        self.metrics.record_routing_evidence(
+            snapshot.policy.version,
+            snapshot.policy.score_version,
+            min(expiries).timestamp(),
+        )
 
     async def _record_failed_usage(
         self,

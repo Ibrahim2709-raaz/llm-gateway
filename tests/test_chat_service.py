@@ -181,7 +181,12 @@ async def test_intelligent_routing_uses_versioned_evidence_metadata() -> None:
         "balanced",
         "policy-v2",
         "scores-v2",
+        0.001027,
+        0.25,
     )
+    evidence_call = metrics.record_routing_evidence.call_args.args
+    assert evidence_call[:2] == ("policy-v2", "scores-v2")
+    assert 0 < evidence_call[2] - datetime.now(UTC).timestamp() <= 30 * 24 * 60 * 60
     response_cache.get.assert_not_awaited()
     response_cache.set.assert_not_awaited()
     metrics.record_cache_request.assert_called_once_with("bypass")

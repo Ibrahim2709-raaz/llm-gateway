@@ -133,6 +133,28 @@
       "targets": [{"expr": "sum by (provider, model, task_category, strategy) (rate(llm_gateway_intelligent_routes_total[5m]))", "legendFormat": "{{provider}} / {{model}} / {{task_category}} / {{strategy}}", "refId": "A"}],
       "title": "Intelligent model selections",
       "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "fieldConfig": {"defaults": {"unit": "s"}},
+      "gridPos": {"h": 6, "w": 8, "x": 0, "y": 33},
+      "id": 15,
+      "options": {"colorMode": "value", "graphMode": "area", "textMode": "auto"},
+      "targets": [{"expr": "min(llm_gateway_routing_evidence_expiration_timestamp_seconds) - time()", "refId": "A"}],
+      "title": "Routing evidence time to expiry",
+      "type": "stat"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "fieldConfig": {"defaults": {"unit": "currencyUSD"}},
+      "gridPos": {"h": 6, "w": 16, "x": 8, "y": 33},
+      "id": 16,
+      "targets": [
+        {"expr": "sum(increase(llm_gateway_intelligent_estimated_cost_usd_total[$__range]))", "legendFormat": "estimated", "refId": "A"},
+        {"expr": "sum(increase(llm_gateway_intelligent_actual_cost_usd_total[$__range]))", "legendFormat": "actual", "refId": "B"}
+      ],
+      "title": "Intelligent estimated vs actual cost",
+      "type": "timeseries"
     }
   ],
   "refresh": "15s",
@@ -143,5 +165,5 @@
   "timezone": "browser",
   "title": "LLM Gateway Overview",
   "uid": "llm-gateway-overview",
-  "version": 2
+  "version": 3
 }

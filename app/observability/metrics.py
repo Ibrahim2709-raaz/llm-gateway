@@ -1,6 +1,13 @@
 from typing import Protocol
 
-from prometheus_client import REGISTRY, CollectorRegistry, Counter, Histogram, generate_latest
+from prometheus_client import (
+    REGISTRY,
+    CollectorRegistry,
+    Counter,
+    Gauge,
+    Histogram,
+    generate_latest,
+)
 
 
 class MetricsRecorder(Protocol):
@@ -40,6 +47,15 @@ class MetricsRecorder(Protocol):
         strategy: str,
         policy_version: str,
         score_version: str,
+        estimated_cost_usd: float,
+        actual_cost_usd: float,
+    ) -> None: ...
+
+    def record_routing_evidence(
+        self,
+        policy_version: str,
+        score_version: str,
+        expiration_timestamp_seconds: float,
     ) -> None: ...
 
 
@@ -121,6 +137,24 @@ class GatewayMetrics:
             ),
             registry=registry,
         )
+        self.intelligent_estimated_cost_usd = Counter(
+            "llm_gateway_intelligent_estimated_cost_usd_total",
+            "Estimated provider cost for executed intelligent routes.",
+            ("provider", "model", "strategy"),
+            registry=registry,
+        )
+        self.intelligent_actual_cost_usd = Counter(
+            "llm_gateway_intelligent_actual_cost_usd_total",
+            "Actual provider cost for executed intelligent routes.",
+            ("provider", "model", "strategy"),
+            registry=registry,
+        )
+        self.routing_evidence_expiration_timestamp_seconds = Gauge(
+            "llm_gateway_routing_evidence_expiration_timestamp_seconds",
+            "Unix timestamp when the earliest active capability score expires.",
+            ("policy_version", "score_version"),
+            registry=registry,
+        )
 
     def record_gateway_request(self, outcome: str, duration_seconds: float) -> None:
         self.gateway_requests.labels(outcome=outcome).inc()
@@ -183,6 +217,8 @@ class GatewayMetrics:
         strategy: str,
         policy_version: str,
         score_version: str,
+        estimated_cost_usd: float,
+        actual_cost_usd: float,
     ) -> None:
         self.intelligent_routes.labels(
             provider=provider,
@@ -192,6 +228,22 @@ class GatewayMetrics:
             policy_version=policy_version,
             score_version=score_version,
         ).inc()
+        cost_labels = {"provider": provider, "model": model, "strategy": strategy}
+        self.intelligent_estimated_cost_usd.labels(**cost_labels).inc(
+            max(0.0, estimated_cost_usd)
+        )
+        self.intelligent_actual_cost_usd.labels(**cost_labels).inc(max(0.0, actual_cost_usd))
+
+    def record_routing_evidence(
+        self,
+        policy_version: str,
+        score_version: str,
+        expiration_timestamp_seconds: float,
+    ) -> None:
+        self.routing_evidence_expiration_timestamp_seconds.labels(
+            policy_version=policy_version,
+            score_version=score_version,
+        ).set(expiration_timestamp_seconds)
 
     def render(self) -> bytes:
         return generate_latest(self.registry)

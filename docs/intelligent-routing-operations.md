@@ -76,6 +76,22 @@ or strategy weights removed alternatives. Verify that the winning provider has
 capacity and that cost and latency remain acceptable. Roll back to baseline if
 the concentration is unexplained or creates reliability risk.
 
+### Routing evidence is expiring
+
+Prepare and review a replacement score set before the active set expires. Do
+not activate it automatically: compare it with the current set, approve the
+change, update the canary's required score and policy pins, and repeat the
+preflight checks. Reduce the canary or return to baseline if fresh evidence
+will not be ready in time.
+
+### Cost estimate drift increases
+
+Compare the configured per-million input/output prices with the provider's
+current price sheet and inspect provider-reported token counts. Pause canary
+expansion while the estimate differs materially from actual recorded cost.
+Update pricing configuration through a reviewed deployment and verify drift
+returns to normal before promotion.
+
 ## Prometheus rule deployment
 
 The local Compose stack loads `monitoring/alerts.yml` automatically. Production
