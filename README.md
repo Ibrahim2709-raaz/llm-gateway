@@ -5,7 +5,7 @@
 A multi-provider LLM API gateway that routes requests according to cost, latency,
 availability, and task complexity.
 
-## Version 0.1 capabilities
+## Gateway capabilities
 
 - OpenAI-compatible chat-completions API
 - OpenAI, Anthropic, and local-model providers
@@ -45,10 +45,10 @@ GitHub Actions validates every pull request and every push to `main` by running
 Ruff, mypy, the full coverage-enforced pytest suite, a Docker image build, and a
 clean-checkout multi-customer smoke test.
 
-## Next phase: evidence-driven intelligent routing
+## Version 0.2 release candidate: evidence-driven intelligent routing
 
-The next development phase evolves the rule-based router into a task-aware,
-evaluation-driven model-selection system. Work will follow the committed
+Version 0.2 extends the rule-based router into a task-aware,
+evaluation-driven model-selection system. The implementation follows the committed
 [intelligent model routing roadmap](docs/intelligent-routing-roadmap.md):
 
 1. Define a versioned task taxonomy and routing data model.
@@ -58,6 +58,96 @@ evaluation-driven model-selection system. Work will follow the committed
 5. Validate decisions in shadow mode before gradual production rollout.
 6. Explain model selections in API metadata and Grafana dashboards.
 
+Milestones 1 through 8 are implemented on the intelligent-routing release
+branch. The remaining release gates require representative non-production
+shadow traffic and a monitored customer canary; they cannot be replaced by
+synthetic tests. Live routing remains disabled by default until those gates are
+reviewed.
+
+On the intelligent-routing development branch, operators can initialize and
+inspect the versioned foundation without exposing it through a customer API:
+
+```bash
+alembic upgrade head
+llm-gateway-routing-foundation seed
+llm-gateway-routing-foundation show
+# Promote a reviewed draft policy:
+llm-gateway-routing-foundation activate candidate-v1 --actor release-bot --reason "gates passed"
+# Return to a previously active policy:
+llm-gateway-routing-foundation rollback baseline-v1 --actor on-call --reason "rollback"
+```
+
+The seed is idempotent. It records the released `baseline-v1` policy and creates
+the initial task-taxonomy dataset in draft state; it does not store production
+prompts or invent capability scores before evaluations exist.
+Policy activation is transactional, permits only one active version, and records
+an immutable operator audit event. `show` includes recent activation history.
+
+Milestone Two includes a deterministic classifier inspection command. It reports
+the primary task category, difficulty, confidence, matched safe signals, reason
+codes, and classifier version without calling an LLM or storing the prompt:
+
+```bash
+llm-gateway-classify "Summarize this Python function and list the key points"
+llm-gateway-classifier-eval --split heldout
+```
+
+The classifier passed the initial labeled validation gate and now supplies task
+difficulty to automatic routing plus safe classification metadata in responses.
+Explicit-model requests remain exempt from automatic difficulty filtering.
+The versioned dataset and thresholds are documented in
+[the classifier dataset card](docs/classifier-dataset.md).
+
+The evaluation harness can be demonstrated without paid provider credentials:
+
+```bash
+alembic upgrade head
+llm-gateway-eval seed-smoke
+llm-gateway-eval create --provider mock --model mock-1
+llm-gateway-eval run <RUN_ID>
+llm-gateway-eval show <RUN_ID>
+llm-gateway-eval publish-scores <RUN_ID> --score-version mock-smoke-v1
+```
+
+Use `llm-gateway-eval resume <RUN_ID>` after an interrupted run. Each completed
+case is committed independently, so resume skips immutable existing results.
+Publishing scores is allowed only for a fully completed run with no failed cases;
+it creates a draft score version and never activates routing automatically.
+After operator review, activate a sufficiently sampled score version with a
+bounded freshness window:
+
+```bash
+llm-gateway-eval compare-scores --provider openai --model MODEL \
+  --score-version VERSION
+llm-gateway-eval activate-scores --provider openai --model MODEL \
+  --score-version VERSION --actor release-bot --valid-days 30
+llm-gateway-eval rollback-scores --provider openai --model MODEL \
+  --score-version PREVIOUS_VERSION --actor on-call
+```
+
+Evidence-driven routing is guarded by `INTELLIGENT_ROUTING_ENABLED=false` by
+default. Enable it only after an active policy references a reviewed active score
+version. When enabled, responses report the exact policy, score version,
+evaluated quality, and safe routing reason codes used for the decision.
+Set `INTELLIGENT_ROUTING_SHADOW_ENABLED=true` first to compare intelligent and
+baseline decisions in sanitized logs without changing the provider used or
+making a second LLM call. Live and shadow flags are mutually exclusive.
+
+For a controlled live rollout, keep `INTELLIGENT_ROUTING_ENABLED=true` and set
+`INTELLIGENT_ROUTING_CANARY_PERCENT` from `0` to `100`. Selection is stable per
+customer, so the same customer does not switch cohorts between requests.
+`INTELLIGENT_ROUTING_CUSTOMER_ALLOWLIST` accepts comma-separated client UUIDs
+for internal or explicitly approved customers regardless of the percentage.
+Controlled rollouts must also set `INTELLIGENT_ROUTING_REQUIRED_POLICY_VERSION`
+and `INTELLIGENT_ROUTING_REQUIRED_SCORE_VERSION`. The gateway fails closed if
+the active database evidence differs from either pin, preventing an evaluation
+activation from silently changing an in-progress canary.
+Setting the global enabled flag to `false` immediately returns every customer
+to `baseline-v1` without changing active evaluation evidence.
+Live-canary requests bypass the response cache so a response produced under a
+different routing policy cannot cross a rollout boundary. A later cache version
+can restore caching by including the policy and score versions in its key.
+
 ## Project documentation
 
 - [MVP scope and acceptance criteria](docs/mvp-scope.md)
@@ -66,6 +156,7 @@ evaluation-driven model-selection system. Work will follow the committed
 - [OpenAPI 3.1 specification](docs/openapi.yaml)
 - [Production deployment and rollback guide](docs/deployment.md)
 - [Intelligent model routing roadmap](docs/intelligent-routing-roadmap.md)
+- [Intelligent routing operations and rollback](docs/intelligent-routing-operations.md)
 
 ## Run locally
 
@@ -274,6 +365,13 @@ The dashboard displays request outcomes, P95 latency, provider errors, fallback
 activity, cache hit rate, rate-limit decisions, token throughput, and cost. Its
 metrics use bounded provider/model/outcome labels and never include customer
 IDs, request IDs, prompts, credentials, or response content.
+
+When intelligent routing shadow mode is enabled, the same dashboard also shows
+baseline-versus-intelligent agreement, classifier confidence, task-category
+distribution, and the exact policy and score versions being evaluated. When
+live intelligent routing is enabled, it shows model selections by task and
+strategy. These routing metrics keep bounded operational labels and do not
+contain prompts or customer identifiers.
 
 ### Run the end-to-end smoke test
 

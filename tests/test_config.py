@@ -1,3 +1,5 @@
+from uuid import UUID
+
 import pytest
 from pydantic import ValidationError
 
@@ -39,6 +41,56 @@ def test_retry_max_delay_cannot_be_lower_than_base_delay() -> None:
             provider_retry_base_delay_seconds=2,
             provider_retry_max_delay_seconds=1,
         )
+
+
+def test_live_and_shadow_intelligent_routing_are_mutually_exclusive() -> None:
+    with pytest.raises(ValidationError, match="cannot both be true"):
+        Settings(
+            _env_file=None,
+            intelligent_routing_enabled=True,
+            intelligent_routing_shadow_enabled=True,
+        )
+
+
+def test_intelligent_routing_canary_settings_parse_customer_ids() -> None:
+    first = "d8a3f20b-53c6-44b7-881c-2ad452e0304e"
+    second = "0a4ba2d0-b875-48cb-9f02-cc595e092502"
+    settings = Settings(
+        _env_file=None,
+        intelligent_routing_canary_percent=10,
+        intelligent_routing_customer_allowlist=f"{first}, {second}",
+    )
+
+    assert settings.intelligent_routing_canary_percent == 10
+    assert settings.intelligent_routing_customer_ids == {UUID(first), UUID(second)}
+
+
+def test_intelligent_routing_customer_allowlist_rejects_invalid_uuid() -> None:
+    with pytest.raises(ValidationError):
+        Settings(
+            _env_file=None,
+            intelligent_routing_customer_allowlist="not-a-client-id",
+        )
+
+
+def test_controlled_live_rollout_requires_pinned_evidence_versions() -> None:
+    with pytest.raises(ValidationError, match="requires pinned policy and score versions"):
+        Settings(
+            _env_file=None,
+            intelligent_routing_enabled=True,
+            intelligent_routing_canary_percent=5,
+        )
+
+    settings = Settings(
+        _env_file=None,
+        intelligent_routing_enabled=True,
+        intelligent_routing_canary_percent=5,
+        intelligent_routing_required_policy_version="policy-v2",
+        intelligent_routing_required_score_version="scores-v2",
+    )
+
+    assert settings.intelligent_routing_required_policy_version == "policy-v2"
+    assert settings.intelligent_routing_required_score_version == "scores-v2"
 
 
 def test_openai_requires_a_nonempty_key_when_enabled() -> None:

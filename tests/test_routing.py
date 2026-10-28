@@ -172,6 +172,21 @@ def test_explicit_model_bypasses_automatic_ranking() -> None:
     assert decision.provider is cheap
 
 
+def test_explicit_model_bypasses_classifier_difficulty_filter() -> None:
+    cheap, fast, quality = make_providers()
+    router = ProviderRouter((cheap, fast, quality))  # type: ignore[arg-type]
+
+    decision = router.route(
+        make_request(
+            model=cheap.model,
+            content="Debug the root cause of this distributed architecture step-by-step",
+        )
+    )
+
+    assert decision.task_complexity == "complex"
+    assert decision.provider is cheap
+
+
 def test_unknown_explicit_model_returns_not_found() -> None:
     router = ProviderRouter(make_providers())  # type: ignore[arg-type]
 

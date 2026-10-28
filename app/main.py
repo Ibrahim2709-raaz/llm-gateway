@@ -9,7 +9,7 @@ from app.api.router import api_router
 from app.core.config import get_settings
 from app.core.errors import register_exception_handlers
 from app.core.logging import configure_logging
-from app.core.resources import create_resources
+from app.core.resources import close_resources, create_resources
 from app.middleware.request_id import RequestIdMiddleware
 from app.middleware.security import RequestBodyLimitMiddleware, SecurityHeadersMiddleware
 
@@ -24,14 +24,7 @@ async def lifespan(application: FastAPI) -> AsyncIterator[None]:
     try:
         yield
     finally:
-        if resources.openai_client is not None:
-            await resources.openai_client.close()
-        if resources.anthropic_client is not None:
-            await resources.anthropic_client.close()
-        if resources.local_client is not None:
-            await resources.local_client.close()
-        await resources.redis.aclose()
-        await resources.database_engine.dispose()
+        await close_resources(resources)
         logger.info("gateway_stopped")
 
 

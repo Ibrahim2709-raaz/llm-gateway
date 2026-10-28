@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: LLM Gateway API
-  version: 0.1.0
+  version: 0.2.0
   description: Multi-provider LLM chat gateway MVP contract.
 servers:
   - url: http://localhost:8000
@@ -300,6 +300,14 @@ components:
         - cached
         - routing_strategy
         - task_complexity
+        - task_category
+        - classification_confidence
+        - classifier_version
+        - classification_reasons
+        - routing_policy_version
+        - score_version
+        - routing_reasons
+        - evaluated_quality
         - estimated_cost_usd
         - attempts
       properties:
@@ -320,6 +328,32 @@ components:
         task_complexity:
           type: string
           enum: [simple, medium, complex]
+        task_category:
+          type: string
+          enum: [coding, reasoning, summarization, extraction, general_chat]
+        classification_confidence:
+          type: number
+          format: double
+          minimum: 0
+          maximum: 1
+        classifier_version:
+          type: string
+        classification_reasons:
+          type: array
+          items:
+            type: string
+        routing_policy_version:
+          type: string
+        score_version:
+          type: string
+        routing_reasons:
+          type: array
+          items:
+            type: string
+        evaluated_quality:
+          type: [number, "null"]
+          minimum: 0
+          maximum: 1
         estimated_cost_usd:
           type: number
           format: double

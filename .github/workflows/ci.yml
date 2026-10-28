@@ -42,6 +42,13 @@ jobs:
           APP_ENV: test
         run: pytest --cov=app --cov-report=term-missing --cov-report=xml
 
+      - name: Validate Prometheus rules
+        run: >-
+          docker run --rm --entrypoint promtool
+          -v "$PWD/monitoring:/etc/prometheus/config:ro"
+          prom/prometheus:v3.5.5
+          check rules /etc/prometheus/config/alerts.yml
+
   container:
     name: Build container
     runs-on: ubuntu-latest

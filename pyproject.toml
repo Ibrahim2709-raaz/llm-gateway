@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "llm-gateway"
-version = "0.1.0"
+version = "0.2.0"
 description = "Multi-provider LLM gateway with routing, limits, cost tracking, and observability"
 readme = "README.md"
 requires-python = ">=3.12"
@@ -28,11 +28,16 @@ dev = [
   "mypy>=1.13,<2",
   "pytest>=8.3,<9",
   "pytest-cov>=6,<7",
+  "pyyaml>=6,<7",
   "ruff>=0.8,<1",
 ]
 
 [project.scripts]
 llm-gateway-create-key = "app.cli.create_api_key:main"
+llm-gateway-classify = "app.cli.classify_request:main"
+llm-gateway-classifier-eval = "app.cli.evaluate_classifier:main"
+llm-gateway-eval = "app.cli.evaluation_harness:main"
+llm-gateway-routing-foundation = "app.cli.routing_foundation:main"
 llm-gateway-set-budget = "app.cli.set_budget:main"
 
 [tool.hatch.build.targets.wheel]

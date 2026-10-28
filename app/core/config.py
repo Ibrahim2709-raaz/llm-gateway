@@ -1,7 +1,8 @@
 from functools import lru_cache
 from typing import Literal
+from uuid import UUID
 
-from pydantic import AnyHttpUrl, Field, SecretStr, model_validator
+from pydantic import AnyHttpUrl, Field, SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 DEFAULT_DEVELOPMENT_API_KEY_PEPPER = "development-only-change-me"
@@ -16,7 +17,7 @@ class Settings(BaseSettings):
     )
 
     app_name: str = "LLM Gateway"
-    app_version: str = "0.1.0"
+    app_version: str = "0.2.0"
     app_env: Literal["development", "test", "production"] = "development"
     log_level: str = Field(default="INFO", pattern="^(DEBUG|INFO|WARNING|ERROR|CRITICAL)$")
     host: str = "0.0.0.0"
@@ -30,6 +31,12 @@ class Settings(BaseSettings):
     request_rate_limit_window_seconds: int = Field(default=60, ge=1, le=86_400)
     response_cache_enabled: bool = True
     response_cache_ttl_seconds: int = Field(default=300, ge=1, le=86_400)
+    intelligent_routing_enabled: bool = False
+    intelligent_routing_shadow_enabled: bool = False
+    intelligent_routing_canary_percent: int = Field(default=100, ge=0, le=100)
+    intelligent_routing_customer_allowlist: str = ""
+    intelligent_routing_required_policy_version: str | None = None
+    intelligent_routing_required_score_version: str | None = None
     max_request_body_bytes: int = Field(default=1_048_576, ge=1_024, le=52_428_800)
     trusted_hosts: str = "*"
     gateway_api_key_pepper: SecretStr = SecretStr(DEFAULT_DEVELOPMENT_API_KEY_PEPPER)
@@ -84,6 +91,22 @@ class Settings(BaseSettings):
                 "PROVIDER_RETRY_MAX_DELAY_SECONDS must be greater than or equal to "
                 "PROVIDER_RETRY_BASE_DELAY_SECONDS"
             )
+        if self.intelligent_routing_enabled and self.intelligent_routing_shadow_enabled:
+            raise ValueError(
+                "INTELLIGENT_ROUTING_ENABLED and INTELLIGENT_ROUTING_SHADOW_ENABLED "
+                "cannot both be true"
+            )
+        controlled_rollout = (
+            self.intelligent_routing_canary_percent < 100
+            or bool(self.intelligent_routing_customer_allowlist.strip())
+        )
+        if self.intelligent_routing_enabled and controlled_rollout and (
+            not self.intelligent_routing_required_policy_version
+            or not self.intelligent_routing_required_score_version
+        ):
+            raise ValueError(
+                "Controlled intelligent routing requires pinned policy and score versions"
+            )
         if (
             self.app_env == "production"
             and self.gateway_api_key_pepper.get_secret_value() == DEFAULT_DEVELOPMENT_API_KEY_PEPPER
@@ -95,9 +118,36 @@ class Settings(BaseSettings):
             raise ValueError("TRUSTED_HOSTS must not contain '*' in production")
         return self
 
+    @field_validator("intelligent_routing_customer_allowlist")
+    @classmethod
+    def validate_intelligent_routing_customer_allowlist(cls, value: str) -> str:
+        for item in value.split(","):
+            if item.strip():
+                UUID(item.strip())
+        return value
+
+    @field_validator(
+        "intelligent_routing_required_policy_version",
+        "intelligent_routing_required_score_version",
+        mode="before",
+    )
+    @classmethod
+    def normalize_optional_routing_version(cls, value: object) -> object:
+        if isinstance(value, str):
+            return value.strip() or None
+        return value
+
     @property
     def trusted_host_list(self) -> list[str]:
         return [host.strip() for host in self.trusted_hosts.split(",") if host.strip()]
+
+    @property
+    def intelligent_routing_customer_ids(self) -> frozenset[UUID]:
+        return frozenset(
+            UUID(item.strip())
+            for item in self.intelligent_routing_customer_allowlist.split(",")
+            if item.strip()
+        )
 
 
 @lru_cache

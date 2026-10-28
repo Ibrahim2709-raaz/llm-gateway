@@ -85,6 +85,16 @@ class GatewayMetadata(BaseModel):
     cached: bool
     routing_strategy: Literal["explicit", "balanced", "cost", "latency", "quality"]
     task_complexity: Literal["simple", "medium", "complex"]
+    task_category: Literal[
+        "coding", "reasoning", "summarization", "extraction", "general_chat"
+    ] = "general_chat"
+    classification_confidence: float = Field(default=0, ge=0, le=1)
+    classifier_version: str = "legacy-complexity-v1"
+    classification_reasons: list[str] = Field(default_factory=list)
+    routing_policy_version: str = "baseline-v1"
+    score_version: str = "static-model-profiles-v1"
+    routing_reasons: list[str] = Field(default_factory=list)
+    evaluated_quality: float | None = Field(default=None, ge=0, le=1)
     estimated_cost_usd: float = Field(ge=0)
     attempts: list[RoutingAttempt]
 
