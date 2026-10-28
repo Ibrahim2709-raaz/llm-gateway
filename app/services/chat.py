@@ -16,7 +16,13 @@ from app.execution.service import (
 )
 from app.observability.metrics import MetricsRecorder
 from app.providers.base import ChatProvider, ProviderRequestError
-from app.routing.service import ProviderRouter
+from app.routing.classifier import classify_request
+from app.routing.intelligent import EvidenceDrivenRouter
+from app.routing.repository import (
+    DatabaseRoutingEvidenceRepository,
+    RoutingEvidenceError,
+)
+from app.routing.service import ProviderRouter, RoutingCandidate, RoutingPlan
 from app.schemas.chat import (
     ChatCompletionRequest,
     ChatCompletionResponse,
@@ -43,9 +49,14 @@ class ChatCompletionService:
         usage_tracker: UsageTracker | None = None,
         metrics: MetricsRecorder | None = None,
         circuit_breaker: ProviderCircuitBreaker | None = None,
+        intelligent_routing_enabled: bool = False,
+        evidence_repository: DatabaseRoutingEvidenceRepository | None = None,
         clock: Callable[[], float] = time.perf_counter,
     ) -> None:
+        self.providers = providers
         self.router = ProviderRouter(providers)
+        self.intelligent_routing_enabled = intelligent_routing_enabled
+        self.evidence_repository = evidence_repository
         self.executor = ProviderExecutor(
             max_retries=max_retries,
             retry_base_delay_seconds=retry_base_delay_seconds,
@@ -82,7 +93,7 @@ class ChatCompletionService:
         elif request.routing.disable_cache:
             self._record_cache_request("bypass")
 
-        routing_plan = self.router.plan(request)
+        routing_plan = await self._plan(request)
         if self.usage_tracker is not None:
             try:
                 await self.usage_tracker.reserve(
@@ -105,6 +116,9 @@ class ChatCompletionService:
             task_category=routing_plan.classification.category.value,
             classification_confidence=routing_plan.classification.confidence,
             classifier_version=routing_plan.classification.classifier_version,
+            routing_policy_version=routing_plan.policy_version,
+            score_version=primary.score_version,
+            routing_reasons=list(primary.reason_codes),
             estimated_cost_usd=str(primary.estimated_cost_usd),
             candidate_count=len(routing_plan.candidates),
         )
@@ -195,6 +209,10 @@ class ChatCompletionService:
                 classification_confidence=routing_plan.classification.confidence,
                 classifier_version=routing_plan.classification.classifier_version,
                 classification_reasons=list(routing_plan.classification.reason_codes),
+                routing_policy_version=routing_plan.policy_version,
+                score_version=execution.candidate.score_version,
+                routing_reasons=list(execution.candidate.reason_codes),
+                evaluated_quality=execution.candidate.quality_score,
                 estimated_cost_usd=float(execution.candidate.estimated_cost_usd),
                 attempts=list(execution.attempts),
             ),
@@ -202,6 +220,51 @@ class ChatCompletionService:
         if self.response_cache is not None and not request.routing.disable_cache:
             await self.response_cache.set(client_id, request, response)
         return response
+
+    async def _plan(self, request: ChatCompletionRequest) -> RoutingPlan:
+        if not self.intelligent_routing_enabled:
+            return self.router.plan(request)
+        if self.evidence_repository is None:
+            raise RuntimeError("Intelligent routing requires an evidence repository")
+        try:
+            snapshot = await self.evidence_repository.load_active()
+        except RoutingEvidenceError as exc:
+            raise GatewayError(
+                "Active routing evidence is unavailable.",
+                code="routing_evidence_unavailable",
+                error_type="service_unavailable_error",
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            ) from exc
+        classification = classify_request(request)
+        evidence_plan = EvidenceDrivenRouter(self.providers).plan(
+            request,
+            classification=classification,
+            policy=snapshot.policy,
+            scores=snapshot.scores,
+        )
+        if not evidence_plan.candidates:
+            raise GatewayError(
+                "No provider has eligible routing evidence for this request.",
+                code="no_evidence_eligible_provider",
+                error_type="service_unavailable_error",
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            )
+        return RoutingPlan(
+            candidates=tuple(
+                RoutingCandidate(
+                    provider=candidate.provider,
+                    estimated_cost_usd=candidate.estimated_cost_usd,
+                    quality_score=candidate.quality_score,
+                    score_version=candidate.score_version,
+                    reason_codes=candidate.reason_codes,
+                    ranking_score=candidate.ranking_score,
+                )
+                for candidate in evidence_plan.candidates
+            ),
+            task_complexity=classification.difficulty.value,
+            classification=classification,
+            policy_version=evidence_plan.policy_version,
+        )
 
     async def _record_failed_usage(
         self,

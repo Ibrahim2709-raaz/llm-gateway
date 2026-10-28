@@ -22,6 +22,10 @@ class RoutingDecision:
 class RoutingCandidate:
     provider: ChatProvider
     estimated_cost_usd: Decimal
+    quality_score: float | None = None
+    score_version: str = "static-model-profiles-v1"
+    reason_codes: tuple[str, ...] = ()
+    ranking_score: float | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -29,6 +33,7 @@ class RoutingPlan:
     candidates: tuple[RoutingCandidate, ...]
     task_complexity: TaskComplexity
     classification: TaskClassification
+    policy_version: str = "baseline-v1"
 
 
 def classify_task(request: ChatCompletionRequest) -> TaskComplexity:

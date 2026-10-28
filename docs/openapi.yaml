@@ -304,6 +304,10 @@ components:
         - classification_confidence
         - classifier_version
         - classification_reasons
+        - routing_policy_version
+        - score_version
+        - routing_reasons
+        - evaluated_quality
         - estimated_cost_usd
         - attempts
       properties:
@@ -338,6 +342,18 @@ components:
           type: array
           items:
             type: string
+        routing_policy_version:
+          type: string
+        score_version:
+          type: string
+        routing_reasons:
+          type: array
+          items:
+            type: string
+        evaluated_quality:
+          type: [number, "null"]
+          minimum: 0
+          maximum: 1
         estimated_cost_usd:
           type: number
           format: double

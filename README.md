@@ -119,6 +119,11 @@ llm-gateway-eval rollback-scores --provider openai --model MODEL \
   --score-version PREVIOUS_VERSION --actor on-call
 ```
 
+Evidence-driven routing is guarded by `INTELLIGENT_ROUTING_ENABLED=false` by
+default. Enable it only after an active policy references a reviewed active score
+version. When enabled, responses report the exact policy, score version,
+evaluated quality, and safe routing reason codes used for the decision.
+
 ## Project documentation
 
 - [MVP scope and acceptance criteria](docs/mvp-scope.md)

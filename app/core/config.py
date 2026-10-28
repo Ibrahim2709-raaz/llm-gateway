@@ -30,6 +30,7 @@ class Settings(BaseSettings):
     request_rate_limit_window_seconds: int = Field(default=60, ge=1, le=86_400)
     response_cache_enabled: bool = True
     response_cache_ttl_seconds: int = Field(default=300, ge=1, le=86_400)
+    intelligent_routing_enabled: bool = False
     max_request_body_bytes: int = Field(default=1_048_576, ge=1_024, le=52_428_800)
     trusted_hosts: str = "*"
     gateway_api_key_pepper: SecretStr = SecretStr(DEFAULT_DEVELOPMENT_API_KEY_PEPPER)

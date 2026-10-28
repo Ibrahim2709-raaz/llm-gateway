@@ -1,3 +1,4 @@
+from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from unittest.mock import AsyncMock, Mock
 from uuid import uuid4
@@ -5,6 +6,7 @@ from uuid import uuid4
 import pytest
 
 from app.core.errors import GatewayError
+from app.db.models import ModelCapabilityScore, RoutingPolicyVersion
 from app.providers.base import (
     ModelRoutingProfile,
     ProviderRateLimitError,
@@ -12,6 +14,10 @@ from app.providers.base import (
     ProviderResult,
     ProviderTimeoutError,
     ProviderUnavailableError,
+)
+from app.routing.repository import (
+    DatabaseRoutingEvidenceRepository,
+    RoutingEvidenceSnapshot,
 )
 from app.schemas.chat import ChatCompletionRequest, ChatMessage, RoutingOptions
 from app.services.chat import ChatCompletionService
@@ -94,6 +100,77 @@ async def test_service_rejects_known_model_excluded_by_policy() -> None:
 
     assert captured.value.status_code == 503
     assert captured.value.code == "no_provider_available"
+
+
+@pytest.mark.anyio
+async def test_intelligent_routing_uses_versioned_evidence_metadata() -> None:
+    provider = SuccessfulProvider()
+    policy = RoutingPolicyVersion(
+        version="policy-v2",
+        status="active",
+        classifier_version="task-rules-v1",
+        score_version="scores-v2",
+        strategy_weights={},
+        minimum_quality={},
+        minimum_sample_count=5,
+        cold_start_mode="exclude",
+    )
+    now = datetime.now(UTC)
+    score = ModelCapabilityScore(
+        evaluation_run_id=uuid4(),
+        provider=provider.name,
+        model=provider.model,
+        score_version="scores-v2",
+        task_category="general_chat",
+        difficulty="simple",
+        quality_score=Decimal("0.91"),
+        sample_count=20,
+        capabilities=["text_generation"],
+        status="active",
+        valid_from=now - timedelta(days=1),
+        valid_until=now + timedelta(days=30),
+    )
+    repository = AsyncMock(spec=DatabaseRoutingEvidenceRepository)
+    repository.load_active.return_value = RoutingEvidenceSnapshot(policy, (score,))
+    service = ChatCompletionService(
+        (provider,),
+        intelligent_routing_enabled=True,
+        evidence_repository=repository,
+    )
+
+    result = await service.create(make_request(), uuid4(), uuid4())
+
+    assert result.gateway.routing_policy_version == "policy-v2"
+    assert result.gateway.score_version == "scores-v2"
+    assert result.gateway.evaluated_quality == 0.91
+    assert result.gateway.routing_reasons == ["evaluated_quality"]
+
+
+@pytest.mark.anyio
+async def test_intelligent_routing_fails_safely_without_eligible_evidence() -> None:
+    provider = SuccessfulProvider()
+    policy = RoutingPolicyVersion(
+        version="policy-v2",
+        status="active",
+        classifier_version="task-rules-v1",
+        score_version="scores-v2",
+        strategy_weights={},
+        minimum_quality={},
+        minimum_sample_count=5,
+        cold_start_mode="exclude",
+    )
+    repository = AsyncMock(spec=DatabaseRoutingEvidenceRepository)
+    repository.load_active.return_value = RoutingEvidenceSnapshot(policy, ())
+    service = ChatCompletionService(
+        (provider,),
+        intelligent_routing_enabled=True,
+        evidence_repository=repository,
+    )
+
+    with pytest.raises(GatewayError) as captured:
+        await service.create(make_request(), uuid4(), uuid4())
+
+    assert captured.value.code == "no_evidence_eligible_provider"
 
 
 @pytest.mark.anyio
