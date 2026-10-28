@@ -127,6 +127,17 @@ Set `INTELLIGENT_ROUTING_SHADOW_ENABLED=true` first to compare intelligent and
 baseline decisions in sanitized logs without changing the provider used or
 making a second LLM call. Live and shadow flags are mutually exclusive.
 
+For a controlled live rollout, keep `INTELLIGENT_ROUTING_ENABLED=true` and set
+`INTELLIGENT_ROUTING_CANARY_PERCENT` from `0` to `100`. Selection is stable per
+customer, so the same customer does not switch cohorts between requests.
+`INTELLIGENT_ROUTING_CUSTOMER_ALLOWLIST` accepts comma-separated client UUIDs
+for internal or explicitly approved customers regardless of the percentage.
+Setting the global enabled flag to `false` immediately returns every customer
+to `baseline-v1` without changing active evaluation evidence.
+Live-canary requests bypass the response cache so a response produced under a
+different routing policy cannot cross a rollout boundary. A later cache version
+can restore caching by including the policy and score versions in its key.
+
 ## Project documentation
 
 - [MVP scope and acceptance criteria](docs/mvp-scope.md)

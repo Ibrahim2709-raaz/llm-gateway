@@ -22,6 +22,7 @@ from app.routing.repository import (
     DatabaseRoutingEvidenceRepository,
     RoutingEvidenceError,
 )
+from app.routing.rollout import IntelligentRoutingRollout
 from app.routing.service import ProviderRouter, RoutingCandidate, RoutingPlan
 from app.schemas.chat import (
     ChatCompletionRequest,
@@ -51,6 +52,7 @@ class ChatCompletionService:
         circuit_breaker: ProviderCircuitBreaker | None = None,
         intelligent_routing_enabled: bool = False,
         intelligent_routing_shadow_enabled: bool = False,
+        intelligent_routing_rollout: IntelligentRoutingRollout | None = None,
         evidence_repository: DatabaseRoutingEvidenceRepository | None = None,
         clock: Callable[[], float] = time.perf_counter,
     ) -> None:
@@ -58,6 +60,7 @@ class ChatCompletionService:
         self.router = ProviderRouter(providers)
         self.intelligent_routing_enabled = intelligent_routing_enabled
         self.intelligent_routing_shadow_enabled = intelligent_routing_shadow_enabled
+        self.intelligent_routing_rollout = intelligent_routing_rollout
         self.evidence_repository = evidence_repository
         if intelligent_routing_enabled and intelligent_routing_shadow_enabled:
             raise ValueError("Live and shadow intelligent routing cannot both be enabled")
@@ -80,7 +83,12 @@ class ChatCompletionService:
         request_id: UUID,
         client_id: UUID,
     ) -> ChatCompletionResponse:
-        if self.response_cache is not None and not request.routing.disable_cache:
+        live_routing_selected = self._live_routing_selected(client_id)
+        if (
+            self.response_cache is not None
+            and not request.routing.disable_cache
+            and not live_routing_selected
+        ):
             cached_response = await self.response_cache.get(client_id, request)
             if cached_response is not None:
                 self._record_cache_request("hit")
@@ -94,10 +102,10 @@ class ChatCompletionService:
                 self._record_gateway_request("cached", 0)
                 return self._cache_hit_response(cached_response, request_id)
             self._record_cache_request("miss")
-        elif request.routing.disable_cache:
+        elif request.routing.disable_cache or live_routing_selected:
             self._record_cache_request("bypass")
 
-        routing_plan = await self._plan(request)
+        routing_plan = await self._plan(request, client_id)
         if self.usage_tracker is not None:
             try:
                 await self.usage_tracker.reserve(
@@ -185,7 +193,7 @@ class ChatCompletionService:
                 float(result.cost_usd),
             )
         self._record_gateway_request("success", latency_ms / 1000)
-        if self.intelligent_routing_enabled and self.metrics is not None:
+        if routing_plan.policy_version != "baseline-v1" and self.metrics is not None:
             self.metrics.record_intelligent_route(
                 provider.name,
                 result.model,
@@ -230,16 +238,20 @@ class ChatCompletionService:
                 attempts=list(execution.attempts),
             ),
         )
-        if self.response_cache is not None and not request.routing.disable_cache:
+        if (
+            self.response_cache is not None
+            and not request.routing.disable_cache
+            and not live_routing_selected
+        ):
             await self.response_cache.set(client_id, request, response)
         return response
 
-    async def _plan(self, request: ChatCompletionRequest) -> RoutingPlan:
+    async def _plan(self, request: ChatCompletionRequest, client_id: UUID) -> RoutingPlan:
         if self.intelligent_routing_shadow_enabled:
             baseline = self.router.plan(request)
             await self._record_shadow_decision(request, baseline)
             return baseline
-        if not self.intelligent_routing_enabled:
+        if not self._live_routing_selected(client_id):
             return self.router.plan(request)
         if self.evidence_repository is None:
             raise RuntimeError("Intelligent routing requires an evidence repository")
@@ -281,6 +293,12 @@ class ChatCompletionService:
             task_complexity=classification.difficulty.value,
             classification=classification,
             policy_version=evidence_plan.policy_version,
+        )
+
+    def _live_routing_selected(self, client_id: UUID) -> bool:
+        return self.intelligent_routing_enabled and (
+            self.intelligent_routing_rollout is None
+            or self.intelligent_routing_rollout.includes(client_id)
         )
 
     async def _record_shadow_decision(

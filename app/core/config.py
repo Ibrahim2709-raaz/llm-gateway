@@ -1,7 +1,8 @@
 from functools import lru_cache
 from typing import Literal
+from uuid import UUID
 
-from pydantic import AnyHttpUrl, Field, SecretStr, model_validator
+from pydantic import AnyHttpUrl, Field, SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 DEFAULT_DEVELOPMENT_API_KEY_PEPPER = "development-only-change-me"
@@ -32,6 +33,8 @@ class Settings(BaseSettings):
     response_cache_ttl_seconds: int = Field(default=300, ge=1, le=86_400)
     intelligent_routing_enabled: bool = False
     intelligent_routing_shadow_enabled: bool = False
+    intelligent_routing_canary_percent: int = Field(default=100, ge=0, le=100)
+    intelligent_routing_customer_allowlist: str = ""
     max_request_body_bytes: int = Field(default=1_048_576, ge=1_024, le=52_428_800)
     trusted_hosts: str = "*"
     gateway_api_key_pepper: SecretStr = SecretStr(DEFAULT_DEVELOPMENT_API_KEY_PEPPER)
@@ -102,9 +105,25 @@ class Settings(BaseSettings):
             raise ValueError("TRUSTED_HOSTS must not contain '*' in production")
         return self
 
+    @field_validator("intelligent_routing_customer_allowlist")
+    @classmethod
+    def validate_intelligent_routing_customer_allowlist(cls, value: str) -> str:
+        for item in value.split(","):
+            if item.strip():
+                UUID(item.strip())
+        return value
+
     @property
     def trusted_host_list(self) -> list[str]:
         return [host.strip() for host in self.trusted_hosts.split(",") if host.strip()]
+
+    @property
+    def intelligent_routing_customer_ids(self) -> frozenset[UUID]:
+        return frozenset(
+            UUID(item.strip())
+            for item in self.intelligent_routing_customer_allowlist.split(",")
+            if item.strip()
+        )
 
 
 @lru_cache

@@ -1,3 +1,5 @@
+from uuid import UUID
+
 import pytest
 from pydantic import ValidationError
 
@@ -47,6 +49,27 @@ def test_live_and_shadow_intelligent_routing_are_mutually_exclusive() -> None:
             _env_file=None,
             intelligent_routing_enabled=True,
             intelligent_routing_shadow_enabled=True,
+        )
+
+
+def test_intelligent_routing_canary_settings_parse_customer_ids() -> None:
+    first = "d8a3f20b-53c6-44b7-881c-2ad452e0304e"
+    second = "0a4ba2d0-b875-48cb-9f02-cc595e092502"
+    settings = Settings(
+        _env_file=None,
+        intelligent_routing_canary_percent=10,
+        intelligent_routing_customer_allowlist=f"{first}, {second}",
+    )
+
+    assert settings.intelligent_routing_canary_percent == 10
+    assert settings.intelligent_routing_customer_ids == {UUID(first), UUID(second)}
+
+
+def test_intelligent_routing_customer_allowlist_rejects_invalid_uuid() -> None:
+    with pytest.raises(ValidationError):
+        Settings(
+            _env_file=None,
+            intelligent_routing_customer_allowlist="not-a-client-id",
         )
 
 

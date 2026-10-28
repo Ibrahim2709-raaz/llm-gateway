@@ -19,6 +19,7 @@ from app.routing.repository import (
     DatabaseRoutingEvidenceRepository,
     RoutingEvidenceSnapshot,
 )
+from app.routing.rollout import IntelligentRoutingRollout
 from app.schemas.chat import ChatCompletionRequest, ChatMessage, RoutingOptions
 from app.services.chat import ChatCompletionService
 
@@ -156,11 +157,15 @@ async def test_intelligent_routing_uses_versioned_evidence_metadata() -> None:
     repository = AsyncMock(spec=DatabaseRoutingEvidenceRepository)
     repository.load_active.return_value = RoutingEvidenceSnapshot(policy, (score,))
     metrics = Mock()
+    response_cache = Mock()
+    response_cache.get = AsyncMock()
+    response_cache.set = AsyncMock()
     service = ChatCompletionService(
         (provider,),
         intelligent_routing_enabled=True,
         evidence_repository=repository,
         metrics=metrics,
+        response_cache=response_cache,
     )
 
     result = await service.create(make_request(), uuid4(), uuid4())
@@ -177,6 +182,9 @@ async def test_intelligent_routing_uses_versioned_evidence_metadata() -> None:
         "policy-v2",
         "scores-v2",
     )
+    response_cache.get.assert_not_awaited()
+    response_cache.set.assert_not_awaited()
+    metrics.record_cache_request.assert_called_once_with("bypass")
 
 
 @pytest.mark.anyio
@@ -204,6 +212,28 @@ async def test_intelligent_routing_fails_safely_without_eligible_evidence() -> N
         await service.create(make_request(), uuid4(), uuid4())
 
     assert captured.value.code == "no_evidence_eligible_provider"
+
+
+@pytest.mark.anyio
+async def test_intelligent_routing_canary_exclusion_uses_baseline_without_loading_evidence(
+) -> None:
+    provider = SuccessfulProvider()
+    repository = AsyncMock(spec=DatabaseRoutingEvidenceRepository)
+    metrics = Mock()
+    service = ChatCompletionService(
+        (provider,),
+        intelligent_routing_enabled=True,
+        intelligent_routing_rollout=IntelligentRoutingRollout(percentage=0),
+        evidence_repository=repository,
+        metrics=metrics,
+    )
+
+    result = await service.create(make_request(), uuid4(), uuid4())
+
+    assert result.gateway.provider == provider.name
+    assert result.gateway.routing_policy_version == "baseline-v1"
+    repository.load_active.assert_not_awaited()
+    metrics.record_intelligent_route.assert_not_called()
 
 
 @pytest.mark.anyio

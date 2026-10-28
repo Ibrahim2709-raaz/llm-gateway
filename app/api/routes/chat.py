@@ -12,6 +12,7 @@ from app.observability.metrics import METRICS
 from app.rate_limits.dependencies import enforce_request_rate_limit
 from app.rate_limits.service import RateLimitStatus
 from app.routing.repository import DatabaseRoutingEvidenceRepository
+from app.routing.rollout import IntelligentRoutingRollout
 from app.schemas.chat import ChatCompletionRequest, ChatCompletionResponse
 from app.services.chat import ChatCompletionService
 from app.usage.service import DatabaseUsageService
@@ -43,6 +44,10 @@ def get_chat_service(
         circuit_breaker=request.app.state.resources.provider_circuit_breaker,
         intelligent_routing_enabled=settings.intelligent_routing_enabled,
         intelligent_routing_shadow_enabled=settings.intelligent_routing_shadow_enabled,
+        intelligent_routing_rollout=IntelligentRoutingRollout(
+            percentage=settings.intelligent_routing_canary_percent,
+            customer_allowlist=settings.intelligent_routing_customer_ids,
+        ),
         evidence_repository=(
             DatabaseRoutingEvidenceRepository(session)
             if (
