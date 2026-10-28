@@ -157,6 +157,7 @@ can restore caching by including the policy and score versions in its key.
 - [Production deployment and rollback guide](docs/deployment.md)
 - [Intelligent model routing roadmap](docs/intelligent-routing-roadmap.md)
 - [Intelligent routing operations and rollback](docs/intelligent-routing-operations.md)
+- [Version 3 product platform roadmap](docs/version-3-roadmap.md)
 
 ## Run locally
 
