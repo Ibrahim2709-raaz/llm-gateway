@@ -31,6 +31,7 @@ class Settings(BaseSettings):
     response_cache_enabled: bool = True
     response_cache_ttl_seconds: int = Field(default=300, ge=1, le=86_400)
     intelligent_routing_enabled: bool = False
+    intelligent_routing_shadow_enabled: bool = False
     max_request_body_bytes: int = Field(default=1_048_576, ge=1_024, le=52_428_800)
     trusted_hosts: str = "*"
     gateway_api_key_pepper: SecretStr = SecretStr(DEFAULT_DEVELOPMENT_API_KEY_PEPPER)
@@ -84,6 +85,11 @@ class Settings(BaseSettings):
             raise ValueError(
                 "PROVIDER_RETRY_MAX_DELAY_SECONDS must be greater than or equal to "
                 "PROVIDER_RETRY_BASE_DELAY_SECONDS"
+            )
+        if self.intelligent_routing_enabled and self.intelligent_routing_shadow_enabled:
+            raise ValueError(
+                "INTELLIGENT_ROUTING_ENABLED and INTELLIGENT_ROUTING_SHADOW_ENABLED "
+                "cannot both be true"
             )
         if (
             self.app_env == "production"

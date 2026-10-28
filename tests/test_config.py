@@ -41,6 +41,15 @@ def test_retry_max_delay_cannot_be_lower_than_base_delay() -> None:
         )
 
 
+def test_live_and_shadow_intelligent_routing_are_mutually_exclusive() -> None:
+    with pytest.raises(ValidationError, match="cannot both be true"):
+        Settings(
+            _env_file=None,
+            intelligent_routing_enabled=True,
+            intelligent_routing_shadow_enabled=True,
+        )
+
+
 def test_openai_requires_a_nonempty_key_when_enabled() -> None:
     with pytest.raises(ValidationError):
         Settings(_env_file=None, openai_enabled=True, openai_api_key="")

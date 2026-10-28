@@ -50,13 +50,17 @@ class ChatCompletionService:
         metrics: MetricsRecorder | None = None,
         circuit_breaker: ProviderCircuitBreaker | None = None,
         intelligent_routing_enabled: bool = False,
+        intelligent_routing_shadow_enabled: bool = False,
         evidence_repository: DatabaseRoutingEvidenceRepository | None = None,
         clock: Callable[[], float] = time.perf_counter,
     ) -> None:
         self.providers = providers
         self.router = ProviderRouter(providers)
         self.intelligent_routing_enabled = intelligent_routing_enabled
+        self.intelligent_routing_shadow_enabled = intelligent_routing_shadow_enabled
         self.evidence_repository = evidence_repository
+        if intelligent_routing_enabled and intelligent_routing_shadow_enabled:
+            raise ValueError("Live and shadow intelligent routing cannot both be enabled")
         self.executor = ProviderExecutor(
             max_retries=max_retries,
             retry_base_delay_seconds=retry_base_delay_seconds,
@@ -222,6 +226,10 @@ class ChatCompletionService:
         return response
 
     async def _plan(self, request: ChatCompletionRequest) -> RoutingPlan:
+        if self.intelligent_routing_shadow_enabled:
+            baseline = self.router.plan(request)
+            await self._record_shadow_decision(request, baseline)
+            return baseline
         if not self.intelligent_routing_enabled:
             return self.router.plan(request)
         if self.evidence_repository is None:
@@ -265,6 +273,46 @@ class ChatCompletionService:
             classification=classification,
             policy_version=evidence_plan.policy_version,
         )
+
+    async def _record_shadow_decision(
+        self, request: ChatCompletionRequest, baseline: RoutingPlan
+    ) -> None:
+        if self.evidence_repository is None:
+            logger.warning("intelligent_shadow_skipped", reason="evidence_repository_missing")
+            return
+        try:
+            snapshot = await self.evidence_repository.load_active()
+            classification = classify_request(request)
+            shadow = EvidenceDrivenRouter(self.providers).plan(
+                request,
+                classification=classification,
+                policy=snapshot.policy,
+                scores=snapshot.scores,
+            )
+            baseline_primary = baseline.candidates[0]
+            shadow_primary = shadow.candidates[0] if shadow.candidates else None
+            logger.info(
+                "intelligent_shadow_decision",
+                baseline_provider=baseline_primary.provider.name,
+                baseline_model=baseline_primary.provider.model,
+                shadow_provider=(shadow_primary.provider.name if shadow_primary else None),
+                shadow_model=(shadow_primary.provider.model if shadow_primary else None),
+                agreed=(
+                    shadow_primary is not None
+                    and shadow_primary.provider.name == baseline_primary.provider.name
+                    and shadow_primary.provider.model == baseline_primary.provider.model
+                ),
+                task_category=classification.category.value,
+                task_difficulty=classification.difficulty.value,
+                policy_version=snapshot.policy.version,
+                score_version=snapshot.policy.score_version,
+                candidate_count=len(shadow.candidates),
+            )
+        except Exception as exc:
+            logger.warning(
+                "intelligent_shadow_skipped",
+                reason=type(exc).__name__,
+            )
 
     async def _record_failed_usage(
         self,

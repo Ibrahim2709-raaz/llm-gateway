@@ -61,6 +61,29 @@ class FailingProvider:
         raise self.error
 
 
+class ShadowProvider:
+    def __init__(self, name: str, *, static_quality: float) -> None:
+        self.name = name
+        self.model = f"{name}-1"
+        self.calls = 0
+        self.routing_profile = ModelRoutingProfile(
+            input_cost_per_million_usd=Decimal("1"),
+            output_cost_per_million_usd=Decimal("1"),
+            estimated_latency_ms=100,
+            quality_score=static_quality,
+        )
+
+    async def complete(self, request: ChatCompletionRequest) -> ProviderResult:
+        self.calls += 1
+        return ProviderResult(
+            content=self.name,
+            model=self.model,
+            prompt_tokens=1,
+            completion_tokens=1,
+            finish_reason="stop",
+        )
+
+
 def make_request(
     *, model: str = "auto", allowed_providers: list[str] | None = None
 ) -> ChatCompletionRequest:
@@ -171,6 +194,58 @@ async def test_intelligent_routing_fails_safely_without_eligible_evidence() -> N
         await service.create(make_request(), uuid4(), uuid4())
 
     assert captured.value.code == "no_evidence_eligible_provider"
+
+
+@pytest.mark.anyio
+async def test_shadow_routing_never_changes_baseline_execution() -> None:
+    baseline_winner = ShadowProvider("baseline", static_quality=0.95)
+    evidence_winner = ShadowProvider("evidence", static_quality=0.40)
+    policy = RoutingPolicyVersion(
+        version="policy-v2",
+        status="active",
+        classifier_version="task-rules-v1",
+        score_version="scores-v2",
+        strategy_weights={"simple": {"quality": 1.0, "latency": 0, "cost": 0}},
+        minimum_quality={},
+        minimum_sample_count=5,
+        cold_start_mode="exclude",
+    )
+    now = datetime.now(UTC)
+
+    def evidence(provider: ShadowProvider, quality: str) -> ModelCapabilityScore:
+        return ModelCapabilityScore(
+            evaluation_run_id=uuid4(),
+            provider=provider.name,
+            model=provider.model,
+            score_version="scores-v2",
+            task_category="general_chat",
+            difficulty="simple",
+            quality_score=Decimal(quality),
+            sample_count=20,
+            capabilities=["text_generation"],
+            status="active",
+            valid_from=now - timedelta(days=1),
+            valid_until=now + timedelta(days=30),
+        )
+
+    repository = AsyncMock(spec=DatabaseRoutingEvidenceRepository)
+    repository.load_active.return_value = RoutingEvidenceSnapshot(
+        policy,
+        (evidence(baseline_winner, "0.50"), evidence(evidence_winner, "0.99")),
+    )
+    service = ChatCompletionService(
+        (baseline_winner, evidence_winner),  # type: ignore[arg-type]
+        intelligent_routing_shadow_enabled=True,
+        evidence_repository=repository,
+    )
+
+    result = await service.create(make_request(), uuid4(), uuid4())
+
+    assert result.gateway.provider == "baseline"
+    assert result.gateway.routing_policy_version == "baseline-v1"
+    assert baseline_winner.calls == 1
+    assert evidence_winner.calls == 0
+    repository.load_active.assert_awaited_once()
 
 
 @pytest.mark.anyio

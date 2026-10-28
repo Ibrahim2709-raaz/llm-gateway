@@ -42,9 +42,13 @@ def get_chat_service(
         metrics=METRICS,
         circuit_breaker=request.app.state.resources.provider_circuit_breaker,
         intelligent_routing_enabled=settings.intelligent_routing_enabled,
+        intelligent_routing_shadow_enabled=settings.intelligent_routing_shadow_enabled,
         evidence_repository=(
             DatabaseRoutingEvidenceRepository(session)
-            if settings.intelligent_routing_enabled
+            if (
+                settings.intelligent_routing_enabled
+                or settings.intelligent_routing_shadow_enabled
+            )
             else None
         ),
     )

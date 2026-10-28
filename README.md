@@ -123,6 +123,9 @@ Evidence-driven routing is guarded by `INTELLIGENT_ROUTING_ENABLED=false` by
 default. Enable it only after an active policy references a reviewed active score
 version. When enabled, responses report the exact policy, score version,
 evaluated quality, and safe routing reason codes used for the decision.
+Set `INTELLIGENT_ROUTING_SHADOW_ENABLED=true` first to compare intelligent and
+baseline decisions in sanitized logs without changing the provider used or
+making a second LLM call. Live and shadow flags are mutually exclusive.
 
 ## Project documentation
 
