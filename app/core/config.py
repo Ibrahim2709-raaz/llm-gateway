@@ -17,7 +17,7 @@ class Settings(BaseSettings):
     )
 
     app_name: str = "LLM Gateway"
-    app_version: str = "0.1.0"
+    app_version: str = "0.2.0"
     app_env: Literal["development", "test", "production"] = "development"
     log_level: str = Field(default="INFO", pattern="^(DEBUG|INFO|WARNING|ERROR|CRITICAL)$")
     host: str = "0.0.0.0"

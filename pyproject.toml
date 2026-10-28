@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "llm-gateway"
-version = "0.1.0"
+version = "0.2.0"
 description = "Multi-provider LLM gateway with routing, limits, cost tracking, and observability"
 readme = "README.md"
 requires-python = ">=3.12"

@@ -1,5 +1,18 @@
 # Intelligent Model Routing Roadmap
 
+## Implementation status
+
+Milestones 1 through 8 are implemented for the version 0.2 release candidate:
+versioned taxonomy and evidence storage, deterministic classification,
+reproducible evaluation runs, audited score and policy activation,
+evidence-driven ranking, offline replay, shadow mode, operational dashboards,
+alerts, deterministic customer canaries, pinned evidence versions, and an
+immediate `baseline-v1` rollback path.
+
+The code gates pass locally and in CI. Production promotion still requires the
+documented shadow and canary observation windows with representative traffic.
+Milestone 9 remains optional follow-on work and is not required for version 0.2.
+
 ## Product objective
 
 Evolve the gateway from a reliable multi-provider proxy into an evidence-driven

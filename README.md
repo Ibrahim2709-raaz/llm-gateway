@@ -5,7 +5,7 @@
 A multi-provider LLM API gateway that routes requests according to cost, latency,
 availability, and task complexity.
 
-## Version 0.1 capabilities
+## Gateway capabilities
 
 - OpenAI-compatible chat-completions API
 - OpenAI, Anthropic, and local-model providers
@@ -45,10 +45,10 @@ GitHub Actions validates every pull request and every push to `main` by running
 Ruff, mypy, the full coverage-enforced pytest suite, a Docker image build, and a
 clean-checkout multi-customer smoke test.
 
-## Next phase: evidence-driven intelligent routing
+## Version 0.2 release candidate: evidence-driven intelligent routing
 
-The next development phase evolves the rule-based router into a task-aware,
-evaluation-driven model-selection system. Work will follow the committed
+Version 0.2 extends the rule-based router into a task-aware,
+evaluation-driven model-selection system. The implementation follows the committed
 [intelligent model routing roadmap](docs/intelligent-routing-roadmap.md):
 
 1. Define a versioned task taxonomy and routing data model.
@@ -57,6 +57,12 @@ evaluation-driven model-selection system. Work will follow the committed
 4. Route using measured quality together with cost, latency, and reliability.
 5. Validate decisions in shadow mode before gradual production rollout.
 6. Explain model selections in API metadata and Grafana dashboards.
+
+Milestones 1 through 8 are implemented on the intelligent-routing release
+branch. The remaining release gates require representative non-production
+shadow traffic and a monitored customer canary; they cannot be replaced by
+synthetic tests. Live routing remains disabled by default until those gates are
+reviewed.
 
 On the intelligent-routing development branch, operators can initialize and
 inspect the versioned foundation without exposing it through a customer API:

@@ -2,6 +2,38 @@
 
 All notable changes to this project are documented in this file.
 
+## [Unreleased]
+
+### Added
+
+- Versioned task taxonomy, classifier metadata, evaluation datasets, resumable
+  evaluation runs, and deterministic scoring.
+- Audited activation and rollback for routing policies and model capability
+  score sets, with freshness and minimum-sample enforcement.
+- Evidence-driven task-aware routing using measured quality, cost, latency,
+  reliability, capability requirements, and customer policy.
+- Offline replay and non-disruptive shadow mode that never makes a second paid
+  provider call.
+- Stable customer canary cohorts, internal-customer allowlists, pinned policy
+  and score versions, and an immediate `baseline-v1` global rollback switch.
+- Versioned routing explanations in API metadata plus Grafana panels for task
+  mix, model selection, latency, cost drift, evidence expiry, and cache savings.
+- Prometheus routing alerts and an incident, promotion, and rollback runbook.
+
+### Changed
+
+- Package and OpenAPI version advanced to 0.2.0 for the intelligent-routing
+  release candidate.
+- CI now validates Prometheus rules and enforces at least 90% test coverage for
+  the cumulative routing implementation.
+
+### Security
+
+- Production prompts remain excluded from evaluation storage, metrics, and
+  routing logs by default.
+- Canary customers bypass the baseline response cache until cache keys include
+  the active policy and score versions, preventing cross-policy cache reuse.
+
 ## [0.1.0] - 2026-10-26
 
 ### Added
