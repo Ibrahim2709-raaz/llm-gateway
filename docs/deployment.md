@@ -108,6 +108,12 @@ Metrics deliberately omit customer IDs, prompts, credentials, and generated
 content. Request IDs are the join key between client reports and structured
 logs.
 
+The Compose stack loads the routing alert rules in `monitoring/alerts.yml`.
+Prometheus displays their state locally; production deployments must connect
+them to Alertmanager or the managed monitoring notification system. Follow the
+[intelligent-routing operations runbook](intelligent-routing-operations.md) for
+canary promotion, incident response, and immediate rollback to `baseline-v1`.
+
 ## Backup and rollback
 
 - Back up PostgreSQL before every migration and test restoration regularly.

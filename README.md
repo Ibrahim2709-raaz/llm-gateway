@@ -150,6 +150,7 @@ can restore caching by including the policy and score versions in its key.
 - [OpenAPI 3.1 specification](docs/openapi.yaml)
 - [Production deployment and rollback guide](docs/deployment.md)
 - [Intelligent model routing roadmap](docs/intelligent-routing-roadmap.md)
+- [Intelligent routing operations and rollback](docs/intelligent-routing-operations.md)
 
 ## Run locally
 
