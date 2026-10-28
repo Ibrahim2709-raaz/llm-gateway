@@ -13,17 +13,22 @@ def test_gateway_metrics_export_bounded_operational_labels() -> None:
     metrics.record_fallback("openai", "local")
     metrics.record_provider_usage("openai", "example-model", 10, 5, 0.0025)
     metrics.record_cache_request("hit")
+    metrics.record_cache_savings("openai", "example-model", 0.0025)
     metrics.record_rate_limit("allowed")
-    metrics.record_shadow_decision("agreement", "coding", 0.9, "policy-v2", "scores-v2")
+    metrics.record_shadow_decision(
+        "agreement", "coding", "complex", 0.9, "policy-v2", "scores-v2"
+    )
     metrics.record_intelligent_route(
         "openai",
         "example-model",
         "coding",
+        "complex",
         "quality",
         "policy-v2",
         "scores-v2",
         0.003,
         0.0025,
+        0.4,
     )
     metrics.record_routing_evidence("policy-v2", "scores-v2", 1_800_000_000)
 
@@ -55,6 +60,7 @@ def test_gateway_metrics_export_bounded_operational_labels() -> None:
             {
                 "result": "agreement",
                 "task_category": "coding",
+                "task_difficulty": "complex",
                 "policy_version": "policy-v2",
                 "score_version": "scores-v2",
             },
@@ -75,9 +81,28 @@ def test_gateway_metrics_export_bounded_operational_labels() -> None:
                 "provider": "openai",
                 "model": "example-model",
                 "task_category": "coding",
+                "task_difficulty": "complex",
                 "strategy": "quality",
                 "policy_version": "policy-v2",
                 "score_version": "scores-v2",
+            },
+        )
+        == 1
+    )
+    assert (
+        registry.get_sample_value(
+            "llm_gateway_cache_saved_cost_usd_total",
+            {"provider": "openai", "model": "example-model"},
+        )
+        == 0.0025
+    )
+    assert (
+        registry.get_sample_value(
+            "llm_gateway_intelligent_route_duration_seconds_count",
+            {
+                "task_category": "coding",
+                "task_difficulty": "complex",
+                "strategy": "quality",
             },
         )
         == 1

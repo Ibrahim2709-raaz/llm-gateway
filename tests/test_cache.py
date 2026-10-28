@@ -207,6 +207,7 @@ async def test_chat_service_returns_isolated_cache_hit_without_provider_call() -
     assert second.choices == first.choices
     tracker.record_cached.assert_awaited_once_with(second_request_id, client_id)
     assert metrics.record_cache_request.call_args_list[:2] == [call("miss"), call("hit")]
+    metrics.record_cache_savings.assert_called_once_with("counting", "counting-1", 0.01)
     metrics.record_gateway_request.assert_any_call("cached", 0)
 
     await service.create(make_request(), uuid4(), uuid4())

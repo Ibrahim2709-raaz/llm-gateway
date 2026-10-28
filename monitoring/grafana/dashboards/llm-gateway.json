@@ -122,7 +122,7 @@
       "datasource": {"type": "prometheus", "uid": "prometheus"},
       "gridPos": {"h": 8, "w": 8, "x": 0, "y": 25},
       "id": 13,
-      "targets": [{"expr": "sum by (result, task_category) (rate(llm_gateway_shadow_decisions_total[5m]))", "legendFormat": "{{result}} / {{task_category}}", "refId": "A"}],
+      "targets": [{"expr": "sum by (result, task_category, task_difficulty) (rate(llm_gateway_shadow_decisions_total[5m]))", "legendFormat": "{{result}} / {{task_category}} / {{task_difficulty}}", "refId": "A"}],
       "title": "Shadow decisions by task",
       "type": "timeseries"
     },
@@ -130,7 +130,7 @@
       "datasource": {"type": "prometheus", "uid": "prometheus"},
       "gridPos": {"h": 8, "w": 16, "x": 8, "y": 25},
       "id": 14,
-      "targets": [{"expr": "sum by (provider, model, task_category, strategy) (rate(llm_gateway_intelligent_routes_total[5m]))", "legendFormat": "{{provider}} / {{model}} / {{task_category}} / {{strategy}}", "refId": "A"}],
+      "targets": [{"expr": "sum by (provider, model, task_category, task_difficulty, strategy) (rate(llm_gateway_intelligent_routes_total[5m]))", "legendFormat": "{{provider}} / {{model}} / {{task_category}} / {{task_difficulty}} / {{strategy}}", "refId": "A"}],
       "title": "Intelligent model selections",
       "type": "timeseries"
     },
@@ -155,6 +155,25 @@
       ],
       "title": "Intelligent estimated vs actual cost",
       "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "fieldConfig": {"defaults": {"unit": "s"}},
+      "gridPos": {"h": 7, "w": 16, "x": 0, "y": 39},
+      "id": 17,
+      "targets": [{"expr": "histogram_quantile(0.95, sum by (le, strategy, task_category, task_difficulty) (rate(llm_gateway_intelligent_route_duration_seconds_bucket[5m])))", "legendFormat": "{{strategy}} / {{task_category}} / {{task_difficulty}}", "refId": "A"}],
+      "title": "P95 intelligent latency by strategy and task",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "fieldConfig": {"defaults": {"unit": "currencyUSD"}},
+      "gridPos": {"h": 7, "w": 8, "x": 16, "y": 39},
+      "id": 18,
+      "options": {"colorMode": "value", "graphMode": "area", "textMode": "auto"},
+      "targets": [{"expr": "sum(increase(llm_gateway_cache_saved_cost_usd_total[$__range]))", "refId": "A"}],
+      "title": "Cache cost saved in range",
+      "type": "stat"
     }
   ],
   "refresh": "15s",
@@ -165,5 +184,5 @@
   "timezone": "browser",
   "title": "LLM Gateway Overview",
   "uid": "llm-gateway-overview",
-  "version": 3
+  "version": 4
 }

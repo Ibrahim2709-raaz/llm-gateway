@@ -99,6 +99,12 @@ class ChatCompletionService:
             cached_response = await self.response_cache.get(client_id, request)
             if cached_response is not None:
                 self._record_cache_request("hit")
+                if self.metrics is not None:
+                    self.metrics.record_cache_savings(
+                        cached_response.gateway.provider,
+                        cached_response.model,
+                        cached_response.gateway.cost_usd,
+                    )
                 if self.usage_tracker is not None:
                     await self.usage_tracker.record_cached(request_id, client_id)
                 logger.info(
@@ -205,11 +211,13 @@ class ChatCompletionService:
                 provider.name,
                 result.model,
                 routing_plan.classification.category.value,
+                routing_plan.classification.difficulty.value,
                 routing_strategy,
                 routing_plan.policy_version,
                 execution.candidate.score_version,
                 float(execution.candidate.estimated_cost_usd),
                 float(result.cost_usd),
+                latency_ms / 1000,
             )
 
         response = ChatCompletionResponse(
@@ -374,6 +382,7 @@ class ChatCompletionService:
                 self.metrics.record_shadow_decision(
                     shadow_result,
                     classification.category.value,
+                    classification.difficulty.value,
                     classification.confidence,
                     snapshot.policy.version,
                     snapshot.policy.score_version,
@@ -384,7 +393,14 @@ class ChatCompletionService:
                 reason=type(exc).__name__,
             )
             if self.metrics is not None:
-                self.metrics.record_shadow_decision("skipped", "unknown", 0, "unknown", "unknown")
+                self.metrics.record_shadow_decision(
+                    "skipped",
+                    "unknown",
+                    "unknown",
+                    0,
+                    "unknown",
+                    "unknown",
+                )
 
     def _record_evidence_freshness(self, snapshot: RoutingEvidenceSnapshot) -> None:
         if self.metrics is None:

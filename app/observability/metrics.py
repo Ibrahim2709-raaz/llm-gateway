@@ -28,12 +28,15 @@ class MetricsRecorder(Protocol):
 
     def record_cache_request(self, result: str) -> None: ...
 
+    def record_cache_savings(self, provider: str, model: str, cost_usd: float) -> None: ...
+
     def record_rate_limit(self, decision: str) -> None: ...
 
     def record_shadow_decision(
         self,
         result: str,
         task_category: str,
+        task_difficulty: str,
         confidence: float,
         policy_version: str,
         score_version: str,
@@ -44,11 +47,13 @@ class MetricsRecorder(Protocol):
         provider: str,
         model: str,
         task_category: str,
+        task_difficulty: str,
         strategy: str,
         policy_version: str,
         score_version: str,
         estimated_cost_usd: float,
         actual_cost_usd: float,
+        duration_seconds: float,
     ) -> None: ...
 
     def record_routing_evidence(
@@ -105,6 +110,12 @@ class GatewayMetrics:
             ("result",),
             registry=registry,
         )
+        self.cache_saved_cost_usd = Counter(
+            "llm_gateway_cache_saved_cost_usd_total",
+            "Provider cost avoided by serving cached responses.",
+            ("provider", "model"),
+            registry=registry,
+        )
         self.rate_limit_decisions = Counter(
             "llm_gateway_rate_limit_decisions_total",
             "Rate-limit decisions by result.",
@@ -114,7 +125,13 @@ class GatewayMetrics:
         self.shadow_decisions = Counter(
             "llm_gateway_shadow_decisions_total",
             "Shadow routing comparisons by result and versioned task context.",
-            ("result", "task_category", "policy_version", "score_version"),
+            (
+                "result",
+                "task_category",
+                "task_difficulty",
+                "policy_version",
+                "score_version",
+            ),
             registry=registry,
         )
         self.classifier_confidence = Histogram(
@@ -131,10 +148,18 @@ class GatewayMetrics:
                 "provider",
                 "model",
                 "task_category",
+                "task_difficulty",
                 "strategy",
                 "policy_version",
                 "score_version",
             ),
+            registry=registry,
+        )
+        self.intelligent_route_duration = Histogram(
+            "llm_gateway_intelligent_route_duration_seconds",
+            "End-to-end duration of executed intelligent routes.",
+            ("task_category", "task_difficulty", "strategy"),
+            buckets=(0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10, 30, 60),
             registry=registry,
         )
         self.intelligent_estimated_cost_usd = Counter(
@@ -188,6 +213,11 @@ class GatewayMetrics:
     def record_cache_request(self, result: str) -> None:
         self.cache_requests.labels(result=result).inc()
 
+    def record_cache_savings(self, provider: str, model: str, cost_usd: float) -> None:
+        self.cache_saved_cost_usd.labels(provider=provider, model=model).inc(
+            max(0.0, cost_usd)
+        )
+
     def record_rate_limit(self, decision: str) -> None:
         self.rate_limit_decisions.labels(decision=decision).inc()
 
@@ -195,6 +225,7 @@ class GatewayMetrics:
         self,
         result: str,
         task_category: str,
+        task_difficulty: str,
         confidence: float,
         policy_version: str,
         score_version: str,
@@ -202,6 +233,7 @@ class GatewayMetrics:
         self.shadow_decisions.labels(
             result=result,
             task_category=task_category,
+            task_difficulty=task_difficulty,
             policy_version=policy_version,
             score_version=score_version,
         ).inc()
@@ -214,16 +246,19 @@ class GatewayMetrics:
         provider: str,
         model: str,
         task_category: str,
+        task_difficulty: str,
         strategy: str,
         policy_version: str,
         score_version: str,
         estimated_cost_usd: float,
         actual_cost_usd: float,
+        duration_seconds: float,
     ) -> None:
         self.intelligent_routes.labels(
             provider=provider,
             model=model,
             task_category=task_category,
+            task_difficulty=task_difficulty,
             strategy=strategy,
             policy_version=policy_version,
             score_version=score_version,
@@ -233,6 +268,11 @@ class GatewayMetrics:
             max(0.0, estimated_cost_usd)
         )
         self.intelligent_actual_cost_usd.labels(**cost_labels).inc(max(0.0, actual_cost_usd))
+        self.intelligent_route_duration.labels(
+            task_category=task_category,
+            task_difficulty=task_difficulty,
+            strategy=strategy,
+        ).observe(max(0.0, duration_seconds))
 
     def record_routing_evidence(
         self,

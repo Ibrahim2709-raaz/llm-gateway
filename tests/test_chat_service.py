@@ -174,16 +174,19 @@ async def test_intelligent_routing_uses_versioned_evidence_metadata() -> None:
     assert result.gateway.score_version == "scores-v2"
     assert result.gateway.evaluated_quality == 0.91
     assert result.gateway.routing_reasons == ["evaluated_quality"]
-    metrics.record_intelligent_route.assert_called_once_with(
+    intelligent_route_call = metrics.record_intelligent_route.call_args.args
+    assert intelligent_route_call[:9] == (
         provider.name,
         provider.model,
         "general_chat",
+        "simple",
         "balanced",
         "policy-v2",
         "scores-v2",
         0.001027,
         0.25,
     )
+    assert intelligent_route_call[9] >= 0
     evidence_call = metrics.record_routing_evidence.call_args.args
     assert evidence_call[:2] == ("policy-v2", "scores-v2")
     assert 0 < evidence_call[2] - datetime.now(UTC).timestamp() <= 30 * 24 * 60 * 60
@@ -326,8 +329,9 @@ async def test_shadow_routing_never_changes_baseline_execution() -> None:
     shadow_call = metrics.record_shadow_decision.call_args.args
     assert shadow_call[0] == "disagreement"
     assert shadow_call[1] == "general_chat"
-    assert 0 <= shadow_call[2] <= 1
-    assert shadow_call[3:] == ("policy-v2", "scores-v2")
+    assert shadow_call[2] == "simple"
+    assert 0 <= shadow_call[3] <= 1
+    assert shadow_call[4:] == ("policy-v2", "scores-v2")
 
 
 @pytest.mark.anyio
