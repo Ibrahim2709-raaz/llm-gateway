@@ -27,6 +27,7 @@ from app.identity.roles import (
     PLATFORM_ROLES,
     SERVICE_ACCOUNT_ROLES,
     SERVICE_ACCOUNT_STATUSES,
+    USER_ACTION_TOKEN_PURPOSES,
     USER_STATUSES,
 )
 from app.routing.taxonomy import (
@@ -100,6 +101,51 @@ class User(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     status: Mapped[str] = mapped_column(String(32), default="active", nullable=False, index=True)
     platform_role: Mapped[str | None] = mapped_column(String(32), index=True)
     email_verified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class BrowserSession(UUIDPrimaryKeyMixin, Base):
+    __tablename__ = "browser_sessions"
+
+    user_id: Mapped[UUID] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    active_organization_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("organizations.id", ondelete="SET NULL"), index=True
+    )
+    token_prefix: Mapped[str] = mapped_column(String(24), nullable=False, index=True)
+    token_hash: Mapped[str] = mapped_column(String(128), nullable=False, unique=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    expires_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, index=True
+    )
+    last_seen_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), index=True)
+
+
+class UserActionToken(UUIDPrimaryKeyMixin, Base):
+    __tablename__ = "user_action_tokens"
+    __table_args__ = (
+        CheckConstraint(
+            f"purpose IN ({_sql_values(USER_ACTION_TOKEN_PURPOSES)})",
+            name="user_action_token_purpose",
+        ),
+    )
+
+    user_id: Mapped[UUID] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    purpose: Mapped[str] = mapped_column(String(32), nullable=False, index=True)
+    token_prefix: Mapped[str] = mapped_column(String(24), nullable=False, index=True)
+    token_hash: Mapped[str] = mapped_column(String(128), nullable=False, unique=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    expires_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, index=True
+    )
+    consumed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), index=True)
 
 
 class OrganizationMembership(UUIDPrimaryKeyMixin, TimestampMixin, Base):

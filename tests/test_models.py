@@ -2,6 +2,7 @@ from app.db.base import Base
 from app.db.models import (
     ApiKey,
     AuditEvent,
+    BrowserSession,
     BudgetLimit,
     Client,
     EvaluationCase,
@@ -20,6 +21,7 @@ from app.db.models import (
     ServiceAccount,
     UsageRecord,
     User,
+    UserActionToken,
 )
 
 
@@ -27,6 +29,7 @@ def test_initial_database_tables_are_registered() -> None:
     assert set(Base.metadata.tables) == {
         ApiKey.__tablename__,
         AuditEvent.__tablename__,
+        BrowserSession.__tablename__,
         BudgetLimit.__tablename__,
         Client.__tablename__,
         EvaluationCase.__tablename__,
@@ -45,6 +48,7 @@ def test_initial_database_tables_are_registered() -> None:
         ServiceAccount.__tablename__,
         UsageRecord.__tablename__,
         User.__tablename__,
+        UserActionToken.__tablename__,
     }
 
 
@@ -166,3 +170,13 @@ def test_audit_events_are_append_only_and_prompt_free() -> None:
     assert "updated_at" not in columns
     assert "prompt" not in columns
     assert "response" not in columns
+
+
+def test_browser_authentication_stores_only_hashed_tokens() -> None:
+    for model in (BrowserSession, UserActionToken):
+        columns = set(model.__table__.columns.keys())
+        assert {"token_prefix", "token_hash", "expires_at"} <= columns
+        assert "token" not in columns
+
+    assert "revoked_at" in BrowserSession.__table__.columns
+    assert "consumed_at" in UserActionToken.__table__.columns
