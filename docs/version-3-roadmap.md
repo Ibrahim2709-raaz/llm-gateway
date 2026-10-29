@@ -52,6 +52,11 @@ tenant-safe product APIs.
 
 ## Milestone 2: Customer web portal
 
+The customer experience follows the approved
+[portal design system](portal-design-system.md): Signal Blue actions, a warm
+beige page canvas, white working surfaces, navy navigation, and accessible
+semantic status colors.
+
 ### Work
 
 - Build a responsive React or Next.js application using the FastAPI backend.
