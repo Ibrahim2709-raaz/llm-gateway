@@ -1,6 +1,7 @@
 from app.db.base import Base
 from app.db.models import (
     ApiKey,
+    AuditEvent,
     BudgetLimit,
     Client,
     EvaluationCase,
@@ -8,18 +9,24 @@ from app.db.models import (
     EvaluationDataset,
     EvaluationRun,
     ModelCapabilityScore,
+    Organization,
+    OrganizationInvitation,
+    OrganizationMembership,
     ProviderConfig,
     RoutingDecisionSnapshot,
     RoutingPolicyActivation,
     RoutingPolicyVersion,
     ScoreSetActivation,
+    ServiceAccount,
     UsageRecord,
+    User,
 )
 
 
 def test_initial_database_tables_are_registered() -> None:
     assert set(Base.metadata.tables) == {
         ApiKey.__tablename__,
+        AuditEvent.__tablename__,
         BudgetLimit.__tablename__,
         Client.__tablename__,
         EvaluationCase.__tablename__,
@@ -27,12 +34,17 @@ def test_initial_database_tables_are_registered() -> None:
         EvaluationDataset.__tablename__,
         EvaluationRun.__tablename__,
         ModelCapabilityScore.__tablename__,
+        Organization.__tablename__,
+        OrganizationInvitation.__tablename__,
+        OrganizationMembership.__tablename__,
         ProviderConfig.__tablename__,
         RoutingDecisionSnapshot.__tablename__,
         RoutingPolicyActivation.__tablename__,
         RoutingPolicyVersion.__tablename__,
         ScoreSetActivation.__tablename__,
+        ServiceAccount.__tablename__,
         UsageRecord.__tablename__,
+        User.__tablename__,
     }
 
 
@@ -125,3 +137,32 @@ def test_score_activations_are_audited_without_credentials() -> None:
         "reason",
     } <= columns
     assert "api_key" not in columns
+
+
+def test_identity_secrets_are_stored_only_as_hashes() -> None:
+    invitation_columns = set(OrganizationInvitation.__table__.columns.keys())
+    service_account_columns = set(ServiceAccount.__table__.columns.keys())
+
+    assert "token_hash" in invitation_columns
+    assert "token" not in invitation_columns
+    assert "secret" not in service_account_columns
+    assert "api_key" not in service_account_columns
+
+
+def test_audit_events_are_append_only_and_prompt_free() -> None:
+    columns = set(AuditEvent.__table__.columns.keys())
+
+    assert {
+        "organization_id",
+        "actor_type",
+        "actor_id",
+        "action",
+        "resource_type",
+        "resource_id",
+        "request_id",
+        "event_data",
+        "created_at",
+    } <= columns
+    assert "updated_at" not in columns
+    assert "prompt" not in columns
+    assert "response" not in columns

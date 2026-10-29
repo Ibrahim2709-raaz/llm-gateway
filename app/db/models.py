@@ -19,6 +19,16 @@ from sqlalchemy import (
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base, TimestampMixin, UUIDPrimaryKeyMixin
+from app.identity.roles import (
+    AUDIT_ACTOR_TYPES,
+    MEMBERSHIP_STATUSES,
+    ORGANIZATION_ROLES,
+    ORGANIZATION_STATUSES,
+    PLATFORM_ROLES,
+    SERVICE_ACCOUNT_ROLES,
+    SERVICE_ACCOUNT_STATUSES,
+    USER_STATUSES,
+)
 from app.routing.taxonomy import (
     COLD_START_MODES,
     EVALUATION_CASE_OUTCOMES,
@@ -51,6 +61,149 @@ class ApiKey(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     key_prefix: Mapped[str] = mapped_column(String(24), nullable=False, index=True)
     key_hash: Mapped[str] = mapped_column(String(128), nullable=False, unique=True)
     revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class Organization(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "organizations"
+    __table_args__ = (
+        UniqueConstraint("client_id", name="uq_organizations_client_id"),
+        CheckConstraint(
+            f"status IN ({_sql_values(ORGANIZATION_STATUSES)})",
+            name="organization_status",
+        ),
+    )
+
+    client_id: Mapped[UUID] = mapped_column(
+        ForeignKey("clients.id", ondelete="RESTRICT"), nullable=False, index=True
+    )
+    slug: Mapped[str] = mapped_column(String(100), nullable=False, unique=True)
+    name: Mapped[str] = mapped_column(String(200), nullable=False)
+    status: Mapped[str] = mapped_column(String(32), default="active", nullable=False, index=True)
+
+
+class User(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "users"
+    __table_args__ = (
+        CheckConstraint(
+            f"status IN ({_sql_values(USER_STATUSES)})",
+            name="user_status",
+        ),
+        CheckConstraint(
+            f"platform_role IS NULL OR platform_role IN ({_sql_values(PLATFORM_ROLES)})",
+            name="user_platform_role",
+        ),
+    )
+
+    email_normalized: Mapped[str] = mapped_column(String(320), nullable=False, unique=True)
+    display_name: Mapped[str] = mapped_column(String(200), nullable=False)
+    password_hash: Mapped[str | None] = mapped_column(String(255))
+    status: Mapped[str] = mapped_column(String(32), default="active", nullable=False, index=True)
+    platform_role: Mapped[str | None] = mapped_column(String(32), index=True)
+    email_verified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class OrganizationMembership(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "organization_memberships"
+    __table_args__ = (
+        UniqueConstraint(
+            "organization_id", "user_id", name="uq_organization_membership_user"
+        ),
+        CheckConstraint(
+            f"role IN ({_sql_values(ORGANIZATION_ROLES)})",
+            name="organization_membership_role",
+        ),
+        CheckConstraint(
+            f"status IN ({_sql_values(MEMBERSHIP_STATUSES)})",
+            name="organization_membership_status",
+        ),
+    )
+
+    organization_id: Mapped[UUID] = mapped_column(
+        ForeignKey("organizations.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    user_id: Mapped[UUID] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    role: Mapped[str] = mapped_column(String(32), nullable=False)
+    status: Mapped[str] = mapped_column(String(32), default="active", nullable=False, index=True)
+
+
+class OrganizationInvitation(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "organization_invitations"
+    __table_args__ = (
+        CheckConstraint(
+            f"role IN ({_sql_values(ORGANIZATION_ROLES)})",
+            name="organization_invitation_role",
+        ),
+    )
+
+    organization_id: Mapped[UUID] = mapped_column(
+        ForeignKey("organizations.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    email_normalized: Mapped[str] = mapped_column(String(320), nullable=False, index=True)
+    role: Mapped[str] = mapped_column(String(32), nullable=False)
+    token_hash: Mapped[str] = mapped_column(String(128), nullable=False, unique=True)
+    invited_by_user_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), index=True
+    )
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    accepted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class ServiceAccount(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "service_accounts"
+    __table_args__ = (
+        CheckConstraint(
+            f"role IN ({_sql_values(SERVICE_ACCOUNT_ROLES)})",
+            name="service_account_role",
+        ),
+        CheckConstraint(
+            f"status IN ({_sql_values(SERVICE_ACCOUNT_STATUSES)})",
+            name="service_account_status",
+        ),
+    )
+
+    organization_id: Mapped[UUID] = mapped_column(
+        ForeignKey("organizations.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    name: Mapped[str] = mapped_column(String(200), nullable=False)
+    role: Mapped[str] = mapped_column(String(32), default="developer", nullable=False)
+    status: Mapped[str] = mapped_column(String(32), default="active", nullable=False, index=True)
+    created_by_user_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), index=True
+    )
+    last_used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class AuditEvent(UUIDPrimaryKeyMixin, Base):
+    __tablename__ = "audit_events"
+    __table_args__ = (
+        CheckConstraint(
+            f"actor_type IN ({_sql_values(AUDIT_ACTOR_TYPES)})",
+            name="audit_event_actor_type",
+        ),
+        CheckConstraint(
+            "(actor_type = 'system' AND actor_id IS NULL) OR "
+            "(actor_type <> 'system' AND actor_id IS NOT NULL)",
+            name="audit_event_actor_identity",
+        ),
+        Index("ix_audit_events_organization_created", "organization_id", "created_at"),
+    )
+
+    organization_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("organizations.id", ondelete="RESTRICT"), index=True
+    )
+    actor_type: Mapped[str] = mapped_column(String(32), nullable=False, index=True)
+    actor_id: Mapped[UUID | None] = mapped_column(index=True)
+    action: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
+    resource_type: Mapped[str] = mapped_column(String(100), nullable=False)
+    resource_id: Mapped[str | None] = mapped_column(String(200))
+    request_id: Mapped[UUID | None] = mapped_column(index=True)
+    event_data: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False, index=True
+    )
 
 
 class ProviderConfig(UUIDPrimaryKeyMixin, TimestampMixin, Base):
