@@ -44,6 +44,7 @@ class Settings(BaseSettings):
     browser_session_touch_interval_seconds: int = Field(default=300, ge=30, le=86_400)
     email_verification_ttl_seconds: int = Field(default=86_400, ge=300, le=604_800)
     password_reset_ttl_seconds: int = Field(default=3_600, ge=300, le=86_400)
+    organization_invitation_ttl_seconds: int = Field(default=604_800, ge=3_600, le=2_592_000)
     portal_action_token_delivery: Literal["response", "disabled"] = "response"
     openai_enabled: bool = False
     openai_api_key: SecretStr | None = None

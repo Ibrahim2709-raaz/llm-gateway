@@ -198,7 +198,7 @@ async def consume_user_action_token(
     statement = select(UserActionToken).where(
         UserActionToken.token_hash == hash_opaque_token(value),
         UserActionToken.purpose == purpose,
-    )
+    ).with_for_update()
     stored = await database.scalar(statement)
     if (
         stored is None

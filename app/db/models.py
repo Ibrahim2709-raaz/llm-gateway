@@ -189,6 +189,7 @@ class OrganizationInvitation(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     )
     email_normalized: Mapped[str] = mapped_column(String(320), nullable=False, index=True)
     role: Mapped[str] = mapped_column(String(32), nullable=False)
+    token_prefix: Mapped[str] = mapped_column(String(24), nullable=False, index=True)
     token_hash: Mapped[str] = mapped_column(String(128), nullable=False, unique=True)
     invited_by_user_id: Mapped[UUID | None] = mapped_column(
         ForeignKey("users.id", ondelete="SET NULL"), index=True
