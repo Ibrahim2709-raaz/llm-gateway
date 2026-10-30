@@ -114,6 +114,7 @@ class BrowserSession(UUIDPrimaryKeyMixin, Base):
     )
     token_prefix: Mapped[str] = mapped_column(String(24), nullable=False, index=True)
     token_hash: Mapped[str] = mapped_column(String(128), nullable=False, unique=True)
+    csrf_token_hash: Mapped[str] = mapped_column(String(128), nullable=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )

@@ -40,6 +40,10 @@ class Settings(BaseSettings):
     max_request_body_bytes: int = Field(default=1_048_576, ge=1_024, le=52_428_800)
     trusted_hosts: str = "*"
     gateway_api_key_pepper: SecretStr = SecretStr(DEFAULT_DEVELOPMENT_API_KEY_PEPPER)
+    browser_session_ttl_seconds: int = Field(default=604_800, ge=300, le=2_592_000)
+    browser_session_touch_interval_seconds: int = Field(default=300, ge=30, le=86_400)
+    email_verification_ttl_seconds: int = Field(default=86_400, ge=300, le=604_800)
+    password_reset_ttl_seconds: int = Field(default=3_600, ge=300, le=86_400)
     openai_enabled: bool = False
     openai_api_key: SecretStr | None = None
     openai_model: str = Field(default="gpt-5.6-terra", min_length=1)
