@@ -228,6 +228,12 @@ Owners and developers can set an organization default of `balanced`, `cost`,
 applies that default only when a chat request omits `routing.strategy`; an
 explicit per-request strategy always takes precedence.
 
+Organization owners can review the portal audit feed at
+`/v1/portal/organizations/{id}/audit-events`. Audit metadata is filtered by
+organization and rejects sensitive fields; PostgreSQL now also blocks every
+`UPDATE` or `DELETE` against the audit table so append-only history is enforced
+below the application layer.
+
 For local development, `PORTAL_ACTION_TOKEN_DELIVERY=response` returns the
 one-time email verification token from registration so the flow can be tested
 without an email vendor. Production refuses to start in that mode. Set it to
