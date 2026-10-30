@@ -1,0 +1,167 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="description" content="LLM Gateway customer portal for usage, cost, routing, keys, and teams.">
+    <title>LLM Gateway Portal</title>
+    <link rel="stylesheet" href="/portal/styles.css">
+    <script src="/portal/app.js" defer></script>
+  </head>
+  <body>
+    <a class="skip-link" href="#main-content">Skip to content</a>
+
+    <main id="auth-view" class="auth-layout">
+      <section class="auth-brand" aria-labelledby="auth-title">
+        <div class="brand-mark" aria-hidden="true">LG</div>
+        <p class="eyebrow">LLM GATEWAY</p>
+        <h1 id="auth-title">One governed path to every model.</h1>
+        <p class="auth-lead">Control cost, reliability, and model choice without changing how your team builds.</p>
+        <ul class="benefit-list">
+          <li><span aria-hidden="true">✓</span> One API key across providers</li>
+          <li><span aria-hidden="true">✓</span> Explainable task-aware routing</li>
+          <li><span aria-hidden="true">✓</span> Budgets, fallback, and audit history</li>
+        </ul>
+      </section>
+
+      <section class="auth-panel" aria-label="Account access">
+        <div class="auth-card">
+          <div class="auth-tabs" role="tablist" aria-label="Account action">
+            <button class="auth-tab is-active" role="tab" aria-selected="true" data-auth-tab="login">Sign in</button>
+            <button class="auth-tab" role="tab" aria-selected="false" data-auth-tab="register">Create account</button>
+          </div>
+
+          <form id="login-form" class="auth-form" data-auth-panel="login">
+            <div>
+              <p class="eyebrow blue">WELCOME BACK</p>
+              <h2>Sign in to your workspace</h2>
+              <p class="muted">Use the organization account you verified.</p>
+            </div>
+            <label>Email<input name="email" type="email" autocomplete="email" required></label>
+            <label>Password<input name="password" type="password" autocomplete="current-password" minlength="12" required></label>
+            <button class="button primary" type="submit">Sign in</button>
+            <button class="text-button" type="button" id="show-reset">Forgot password?</button>
+          </form>
+
+          <form id="register-form" class="auth-form hidden" data-auth-panel="register">
+            <div>
+              <p class="eyebrow blue">GET STARTED</p>
+              <h2>Create your organization</h2>
+              <p class="muted">You will become the first organization owner.</p>
+            </div>
+            <div class="form-grid two">
+              <label>Your name<input name="display_name" autocomplete="name" maxlength="200" required></label>
+              <label>Work email<input name="email" type="email" autocomplete="email" required></label>
+            </div>
+            <div class="form-grid two">
+              <label>Organization<input name="organization_name" maxlength="200" required></label>
+              <label>Workspace slug<input name="organization_slug" pattern="[a-z0-9][a-z0-9-]{1,61}[a-z0-9]" placeholder="acme-ai" required></label>
+            </div>
+            <label>Password<input name="password" type="password" autocomplete="new-password" minlength="12" required><small>At least 12 characters.</small></label>
+            <button class="button primary" type="submit">Create organization</button>
+          </form>
+
+          <form id="verify-form" class="auth-form hidden">
+            <div>
+              <p class="eyebrow blue">VERIFY EMAIL</p>
+              <h2>Complete account setup</h2>
+              <p class="muted">In local development the verification token is filled automatically.</p>
+            </div>
+            <label>Verification token<input name="token" autocomplete="one-time-code" required></label>
+            <button class="button primary" type="submit">Verify email</button>
+          </form>
+
+          <form id="reset-form" class="auth-form hidden">
+            <div>
+              <p class="eyebrow blue">PASSWORD RESET</p>
+              <h2>Request a reset token</h2>
+              <p class="muted">The response is always the same, whether the account exists or not.</p>
+            </div>
+            <label>Email<input name="email" type="email" autocomplete="email" required></label>
+            <button class="button primary" type="submit">Request reset</button>
+            <button class="text-button" type="button" data-return-login>Return to sign in</button>
+          </form>
+        </div>
+      </section>
+    </main>
+
+    <div id="app-view" class="app-shell hidden">
+      <aside class="sidebar">
+        <div class="sidebar-brand"><span class="brand-mark small">LG</span><span>LLM Gateway</span></div>
+        <nav aria-label="Portal navigation">
+          <button class="nav-item is-active" data-view="overview"><span aria-hidden="true">⌂</span> Overview</button>
+          <button class="nav-item" data-view="usage"><span aria-hidden="true">◫</span> Usage & cost</button>
+          <button class="nav-item" data-view="routing"><span aria-hidden="true">◇</span> Intelligent routing</button>
+          <button class="nav-item" data-view="keys"><span aria-hidden="true">⌁</span> API keys</button>
+          <button class="nav-item" data-view="team"><span aria-hidden="true">◎</span> Team</button>
+          <button class="nav-item" data-view="audit"><span aria-hidden="true">≡</span> Audit history</button>
+        </nav>
+        <div class="sidebar-footer">
+          <div class="status-dot"><span></span> Gateway connected</div>
+          <a href="/docs">API documentation</a>
+        </div>
+      </aside>
+
+      <header class="topbar">
+        <button id="menu-button" class="icon-button menu-button" type="button" aria-label="Open navigation">☰</button>
+        <div class="organization-switcher">
+          <span class="org-avatar" id="org-avatar">O</span>
+          <label><span class="sr-only">Active organization</span><select id="organization-select"></select></label>
+        </div>
+        <div class="topbar-actions">
+          <span class="role-pill" id="role-pill">Owner</span>
+          <div class="user-menu"><span id="user-name">User</span><button id="sign-out" class="icon-button" type="button" aria-label="Sign out">↪</button></div>
+        </div>
+      </header>
+
+      <main id="main-content" class="content" tabindex="-1">
+        <section class="page" data-page="overview">
+          <div class="page-heading"><div><p class="eyebrow blue">WORKSPACE OVERVIEW</p><h1>Good to see you, <span id="welcome-name">there</span>.</h1><p class="muted">Here is how your gateway is performing this month.</p></div><span class="period-chip" id="period-chip"></span></div>
+          <div class="metric-grid">
+            <article class="metric-card"><p>Estimated provider cost</p><strong id="metric-cost">$0.00</strong><span class="metric-caption">Settled usage this month</span></article>
+            <article class="metric-card"><p>Requests</p><strong id="metric-requests">0</strong><span class="metric-caption">Successful and cached</span></article>
+            <article class="metric-card"><p>Total tokens</p><strong id="metric-tokens">0</strong><span class="metric-caption">Input and output combined</span></article>
+            <article class="metric-card"><p>Remaining allowance</p><strong id="metric-remaining">—</strong><span class="metric-caption" id="budget-caption">No budget configured</span></article>
+          </div>
+          <div class="dashboard-grid">
+            <article class="card span-two">
+              <div class="card-heading"><div><p class="eyebrow">BUDGET HEALTH</p><h2>Monthly allowance</h2></div><span id="budget-state" class="status-badge neutral">Not configured</span></div>
+              <div class="budget-visual"><div class="budget-bar"><span id="budget-bar-fill"></span></div><div class="budget-labels"><span id="budget-used-label">$0.00 used</span><span id="budget-limit-label">No limit</span></div></div>
+              <form id="budget-form" class="inline-form owner-only"><label>Monthly limit (USD)<input name="limit_usd" type="number" min="0.01" step="0.01" required></label><label>Alert at %<input name="alert_threshold_percent" type="number" min="1" max="100" value="80" required></label><button class="button secondary" type="submit">Update budget</button></form>
+            </article>
+            <article class="card"><p class="eyebrow">ROUTING DEFAULT</p><h2 id="overview-strategy">Balanced</h2><p class="muted">Applied when a request does not choose its own strategy.</p><button class="text-button aligned" type="button" data-go-view="routing">Review routing →</button></article>
+          </div>
+        </section>
+
+        <section class="page hidden" data-page="usage">
+          <div class="page-heading"><div><p class="eyebrow blue">USAGE & COST</p><h1>Understand every token and dollar.</h1><p class="muted">Provider cost estimates remain separate from budgets and future customer billing.</p></div></div>
+          <div class="card"><div class="table-wrap"><table><thead><tr><th>Period</th><th>Requests</th><th>Input tokens</th><th>Output tokens</th><th>Total tokens</th><th>Provider cost</th><th>Remaining</th></tr></thead><tbody id="usage-table"></tbody></table></div></div>
+        </section>
+
+        <section class="page hidden" data-page="routing">
+          <div class="page-heading"><div><p class="eyebrow blue">INTELLIGENT ROUTING</p><h1>Control the goal. Inspect the choice.</h1><p class="muted">Your default guides automatic routing; explicit request settings still win.</p></div></div>
+          <article class="card preference-card"><div><p class="eyebrow">ORGANIZATION DEFAULT</p><h2>Routing preference</h2><p class="muted">Choose the outcome the gateway should optimize when callers leave it unspecified.</p></div><form id="routing-preference-form" class="strategy-options"><label><input type="radio" name="strategy" value="balanced"><span><strong>Balanced</strong><small>Quality, speed, cost, and reliability</small></span></label><label><input type="radio" name="strategy" value="cost"><span><strong>Lowest cost</strong><small>Prefer the cheapest eligible model</small></span></label><label><input type="radio" name="strategy" value="latency"><span><strong>Lowest latency</strong><small>Prefer the fastest eligible model</small></span></label><label><input type="radio" name="strategy" value="quality"><span><strong>Highest quality</strong><small>Prefer the best measured score</small></span></label><button class="button primary" type="submit">Save preference</button></form></article>
+          <article class="card"><div class="card-heading"><div><p class="eyebrow">RECENT DECISIONS</p><h2>Why each model was selected</h2></div><span class="privacy-note">Prompts are not stored</span></div><div id="routing-decisions" class="decision-list"><p class="empty-state">No routing decisions yet.</p></div></article>
+        </section>
+
+        <section class="page hidden" data-page="keys">
+          <div class="page-heading"><div><p class="eyebrow blue">API KEYS</p><h1>Connect applications securely.</h1><p class="muted">Secrets are shown once. The gateway stores only a safe prefix and digest.</p></div><button id="new-key-button" class="button primary" type="button">Create API key</button></div>
+          <article class="card"><div class="table-wrap"><table><thead><tr><th>Name</th><th>Prefix</th><th>Created</th><th>Status</th><th><span class="sr-only">Actions</span></th></tr></thead><tbody id="keys-table"></tbody></table></div></article>
+        </section>
+
+        <section class="page hidden" data-page="team">
+          <div class="page-heading"><div><p class="eyebrow blue">TEAM</p><h1>People and permissions.</h1><p class="muted">Owners manage roles. The final active owner can never be removed.</p></div><button id="invite-button" class="button primary owner-only" type="button">Invite member</button></div>
+          <article class="card"><div class="table-wrap"><table><thead><tr><th>Member</th><th>Role</th><th>Status</th></tr></thead><tbody id="members-table"></tbody></table></div></article>
+        </section>
+
+        <section class="page hidden" data-page="audit">
+          <div class="page-heading"><div><p class="eyebrow blue">AUDIT HISTORY</p><h1>Know who changed what.</h1><p class="muted">Immutable security and configuration metadata, without prompts or secrets.</p></div></div>
+          <article class="card"><div id="audit-list" class="audit-list"><p class="empty-state">No audit events yet.</p></div></article>
+        </section>
+      </main>
+    </div>
+
+    <dialog id="form-dialog"><form method="dialog" class="dialog-card"><div class="dialog-heading"><div><p class="eyebrow blue" id="dialog-eyebrow">ACTION</p><h2 id="dialog-title">Continue</h2></div><button class="icon-button" value="cancel" aria-label="Close">×</button></div><div id="dialog-body"></div></form></dialog>
+    <div id="toast-region" class="toast-region" aria-live="polite" aria-atomic="true"></div>
+  </body>
+</html>

@@ -174,6 +174,7 @@ uvicorn app.main:app --reload
 Open:
 
 - API documentation: <http://localhost:8000/docs>
+- Customer portal: <http://localhost:8000/portal/>
 - Liveness: <http://localhost:8000/health/live>
 - Readiness: <http://localhost:8000/health/ready>
 - Prometheus metrics: <http://localhost:8000/metrics>

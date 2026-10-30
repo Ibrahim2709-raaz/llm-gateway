@@ -1,8 +1,10 @@
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 import structlog
 from fastapi import FastAPI
+from fastapi.staticfiles import StaticFiles
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 
 from app.api.router import api_router
@@ -55,6 +57,12 @@ def create_app() -> FastAPI:
         include_hsts=settings.app_env == "production",
     )
     application.include_router(api_router)
+    portal_directory = Path(__file__).parent / "static" / "portal"
+    application.mount(
+        "/portal",
+        StaticFiles(directory=portal_directory, html=True),
+        name="portal",
+    )
     register_exception_handlers(application)
     return application
 

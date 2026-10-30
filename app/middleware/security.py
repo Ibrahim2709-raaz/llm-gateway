@@ -41,7 +41,10 @@ class RequestBodyLimitMiddleware:
                 message = messages[message_index]
                 message_index += 1
                 return message
-            return {"type": "http.request", "body": b"", "more_body": False}
+            # Streaming and file responses may listen for the real disconnect
+            # after the buffered request body has been replayed. Forwarding to
+            # the original receive channel preserves that ASGI lifecycle.
+            return await receive()
 
         await self.app(scope, replay_receive, send)
 
