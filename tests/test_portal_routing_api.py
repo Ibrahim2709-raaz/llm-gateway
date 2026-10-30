@@ -7,3 +7,5 @@ def test_portal_routing_decisions_are_in_openapi_contract() -> None:
     with TestClient(create_app()) as client:
         paths = client.get("/openapi.json").json()["paths"]
     assert "/v1/portal/organizations/{organization_id}/routing/decisions" in paths
+    preference = "/v1/portal/organizations/{organization_id}/routing/preference"
+    assert set(paths[preference]) >= {"get", "put"}

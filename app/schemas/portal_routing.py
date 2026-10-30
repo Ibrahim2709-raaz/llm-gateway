@@ -27,3 +27,11 @@ class RoutingDecisionResponse(RoutingSchema):
 
 class RoutingDecisionListResponse(RoutingSchema):
     data: list[RoutingDecisionResponse]
+
+
+class UpdateRoutingPreferenceRequest(RoutingSchema):
+    strategy: Literal["balanced", "cost", "latency", "quality"]
+
+
+class RoutingPreferenceResponse(RoutingSchema):
+    strategy: Literal["balanced", "cost", "latency", "quality"]

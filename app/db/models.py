@@ -25,6 +25,7 @@ from app.identity.roles import (
     ORGANIZATION_ROLES,
     ORGANIZATION_STATUSES,
     PLATFORM_ROLES,
+    ROUTING_STRATEGIES,
     SERVICE_ACCOUNT_ROLES,
     SERVICE_ACCOUNT_STATUSES,
     USER_ACTION_TOKEN_PURPOSES,
@@ -222,6 +223,25 @@ class ServiceAccount(UUIDPrimaryKeyMixin, TimestampMixin, Base):
         ForeignKey("users.id", ondelete="SET NULL"), index=True
     )
     last_used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class OrganizationRoutingPreference(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "organization_routing_preferences"
+    __table_args__ = (
+        UniqueConstraint("organization_id", name="uq_organization_routing_preference"),
+        CheckConstraint(
+            f"strategy IN ({_sql_values(ROUTING_STRATEGIES)})",
+            name="organization_routing_preference_strategy",
+        ),
+    )
+
+    organization_id: Mapped[UUID] = mapped_column(
+        ForeignKey("organizations.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    strategy: Mapped[str] = mapped_column(String(32), default="balanced", nullable=False)
+    updated_by_user_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), index=True
+    )
 
 
 class AuditEvent(UUIDPrimaryKeyMixin, Base):

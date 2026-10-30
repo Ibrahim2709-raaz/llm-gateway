@@ -9,3 +9,4 @@ PLATFORM_ROLES = ("platform_operator",)
 
 AUDIT_ACTOR_TYPES = ("user", "service_account", "api_key", "system")
 USER_ACTION_TOKEN_PURPOSES = ("email_verification", "password_reset")
+ROUTING_STRATEGIES = ("balanced", "cost", "latency", "quality")

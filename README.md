@@ -223,6 +223,11 @@ models, policy and score versions, candidate counts, and safe reason codes at
 `/v1/portal/organizations/{id}/routing/decisions`. Prompts and model responses
 are not stored in these snapshots.
 
+Owners and developers can set an organization default of `balanced`, `cost`,
+`latency`, or `quality` through the routing preference endpoint. The gateway
+applies that default only when a chat request omits `routing.strategy`; an
+explicit per-request strategy always takes precedence.
+
 For local development, `PORTAL_ACTION_TOKEN_DELIVERY=response` returns the
 one-time email verification token from registration so the flow can be tested
 without an email vendor. Production refuses to start in that mode. Set it to

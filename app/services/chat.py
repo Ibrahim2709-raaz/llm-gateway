@@ -18,6 +18,7 @@ from app.observability.metrics import MetricsRecorder
 from app.providers.base import ChatProvider, ProviderRequestError
 from app.routing.classifier import classify_request
 from app.routing.intelligent import EvidenceDrivenRouter
+from app.routing.preferences import DatabaseRoutingPreferenceResolver
 from app.routing.repository import (
     DatabaseRoutingEvidenceRepository,
     RoutingEvidenceError,
@@ -57,6 +58,7 @@ class ChatCompletionService:
         intelligent_routing_required_policy_version: str | None = None,
         intelligent_routing_required_score_version: str | None = None,
         evidence_repository: DatabaseRoutingEvidenceRepository | None = None,
+        routing_preference_resolver: DatabaseRoutingPreferenceResolver | None = None,
         clock: Callable[[], float] = time.perf_counter,
     ) -> None:
         self.providers = providers
@@ -69,6 +71,7 @@ class ChatCompletionService:
         )
         self.intelligent_routing_required_score_version = intelligent_routing_required_score_version
         self.evidence_repository = evidence_repository
+        self.routing_preference_resolver = routing_preference_resolver
         if intelligent_routing_enabled and intelligent_routing_shadow_enabled:
             raise ValueError("Live and shadow intelligent routing cannot both be enabled")
         self.executor = ProviderExecutor(
@@ -90,6 +93,8 @@ class ChatCompletionService:
         request_id: UUID,
         client_id: UUID,
     ) -> ChatCompletionResponse:
+        if self.routing_preference_resolver is not None:
+            request = await self.routing_preference_resolver.apply(client_id, request)
         live_routing_selected = self._live_routing_selected(client_id)
         if (
             self.response_cache is not None
