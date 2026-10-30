@@ -202,6 +202,11 @@ sessions use an HTTP-only cookie plus a session-bound `X-CSRF-Token` for every
 authenticated mutation. Raw session and action tokens are never stored in the
 database.
 
+Organization owners can also list members, issue role-scoped invitations, and
+change member roles or status through `/v1/portal/organizations/{id}`. The API
+blocks cross-organization access and uses database row locks to ensure that
+concurrent updates cannot remove the final active owner.
+
 For local development, `PORTAL_ACTION_TOKEN_DELIVERY=response` returns the
 one-time email verification token from registration so the flow can be tested
 without an email vendor. Production refuses to start in that mode. Set it to
