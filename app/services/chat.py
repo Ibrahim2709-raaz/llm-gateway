@@ -119,6 +119,13 @@ class ChatCompletionService:
             self._record_cache_request("bypass")
 
         routing_plan = await self._plan(request, client_id)
+        if self.evidence_repository is not None:
+            await self.evidence_repository.record_decision(
+                request_id=request_id,
+                client_id=client_id,
+                plan=routing_plan,
+                created_at=datetime.now(UTC),
+            )
         if self.usage_tracker is not None:
             try:
                 await self.usage_tracker.reserve(

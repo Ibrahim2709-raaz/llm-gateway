@@ -580,6 +580,7 @@ class RoutingDecisionSnapshot(UUIDPrimaryKeyMixin, Base):
     difficulty: Mapped[str] = mapped_column(String(32), nullable=False)
     classification_confidence: Mapped[Decimal] = mapped_column(Numeric(7, 6), nullable=False)
     classifier_version: Mapped[str] = mapped_column(String(64), nullable=False)
+    policy_version: Mapped[str] = mapped_column(String(64), nullable=False)
     score_version: Mapped[str] = mapped_column(String(64), nullable=False)
     selected_provider: Mapped[str] = mapped_column(String(64), nullable=False)
     selected_model: Mapped[str] = mapped_column(String(128), nullable=False)

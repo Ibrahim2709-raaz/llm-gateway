@@ -54,14 +54,9 @@ def get_chat_service(
         intelligent_routing_required_score_version=(
             settings.intelligent_routing_required_score_version
         ),
-        evidence_repository=(
-            DatabaseRoutingEvidenceRepository(session)
-            if (
-                settings.intelligent_routing_enabled
-                or settings.intelligent_routing_shadow_enabled
-            )
-            else None
-        ),
+        # The repository also stores privacy-safe decision snapshots for the
+        # customer portal, even when intelligent routing is disabled.
+        evidence_repository=DatabaseRoutingEvidenceRepository(session),
     )
 
 

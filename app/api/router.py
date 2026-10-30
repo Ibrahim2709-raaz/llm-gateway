@@ -7,6 +7,7 @@ from app.api.routes import (
     portal_auth,
     portal_keys,
     portal_members,
+    portal_routing,
     portal_usage,
     usage,
 )
@@ -19,4 +20,5 @@ api_router.include_router(portal_auth.router)
 api_router.include_router(portal_members.router)
 api_router.include_router(portal_keys.router)
 api_router.include_router(portal_usage.router)
+api_router.include_router(portal_routing.router)
 api_router.include_router(metrics.router)

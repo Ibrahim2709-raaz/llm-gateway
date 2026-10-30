@@ -217,6 +217,12 @@ budget, and remaining-allowance totals at
 `/v1/portal/organizations/{id}/usage`. Owners can update monthly budgets through
 the adjacent `/budgets/{period}` endpoint; changes are row-locked and audited.
 
+Every non-cached live routing plan now records a privacy-safe decision snapshot.
+Owners and developers can inspect recent classifications, selected providers and
+models, policy and score versions, candidate counts, and safe reason codes at
+`/v1/portal/organizations/{id}/routing/decisions`. Prompts and model responses
+are not stored in these snapshots.
+
 For local development, `PORTAL_ACTION_TOKEN_DELIVERY=response` returns the
 one-time email verification token from registration so the flow can be tested
 without an email vendor. Production refuses to start in that mode. Set it to

@@ -1,9 +1,17 @@
 from dataclasses import dataclass
+from datetime import datetime
+from decimal import Decimal
+from uuid import UUID
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.db.models import ModelCapabilityScore, RoutingPolicyVersion
+from app.db.models import (
+    ModelCapabilityScore,
+    RoutingDecisionSnapshot,
+    RoutingPolicyVersion,
+)
+from app.routing.service import RoutingPlan
 
 
 class RoutingEvidenceError(RuntimeError):
@@ -75,3 +83,45 @@ class DatabaseRoutingEvidenceRepository:
                 "Active score snapshot contains duplicate model/task records",
             )
         return RoutingEvidenceSnapshot(policy=policy, scores=tuple(scores))
+
+    async def record_decision(
+        self,
+        *,
+        request_id: UUID,
+        client_id: UUID,
+        plan: RoutingPlan,
+        created_at: datetime,
+    ) -> RoutingDecisionSnapshot:
+        primary = plan.candidates[0]
+        snapshot = RoutingDecisionSnapshot(
+            request_id=request_id,
+            client_id=client_id,
+            routing_policy_id=None,
+            task_category=plan.classification.category.value,
+            difficulty=plan.classification.difficulty.value,
+            classification_confidence=Decimal(str(plan.classification.confidence)),
+            classifier_version=plan.classification.classifier_version,
+            policy_version=plan.policy_version,
+            score_version=primary.score_version,
+            selected_provider=primary.provider.name,
+            selected_model=primary.provider.model,
+            reason_codes=list(primary.reason_codes),
+            candidate_count=len(plan.candidates),
+            created_at=created_at,
+        )
+        self.session.add(snapshot)
+        await self.session.flush()
+        return snapshot
+
+    async def list_decisions(
+        self, *, client_id: UUID, limit: int
+    ) -> list[RoutingDecisionSnapshot]:
+        if not 1 <= limit <= 200:
+            raise ValueError("Decision limit must be between 1 and 200")
+        statement = (
+            select(RoutingDecisionSnapshot)
+            .where(RoutingDecisionSnapshot.client_id == client_id)
+            .order_by(RoutingDecisionSnapshot.created_at.desc(), RoutingDecisionSnapshot.id)
+            .limit(limit)
+        )
+        return list((await self.session.scalars(statement)).all())

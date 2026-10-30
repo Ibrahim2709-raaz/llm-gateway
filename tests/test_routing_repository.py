@@ -1,3 +1,4 @@
+from datetime import UTC, datetime
 from decimal import Decimal
 from unittest.mock import AsyncMock, Mock
 from uuid import uuid4
@@ -5,11 +6,14 @@ from uuid import uuid4
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.db.models import ModelCapabilityScore, RoutingPolicyVersion
+from app.db.models import ModelCapabilityScore, RoutingDecisionSnapshot, RoutingPolicyVersion
+from app.providers.mock import MockProvider
 from app.routing.repository import (
     DatabaseRoutingEvidenceRepository,
     RoutingEvidenceError,
 )
+from app.routing.service import ProviderRouter
+from app.schemas.chat import ChatCompletionRequest, ChatMessage
 
 
 def query_result(values: list[object]) -> Mock:
@@ -94,3 +98,46 @@ async def test_repository_rejects_duplicate_score_coordinates() -> None:
         await DatabaseRoutingEvidenceRepository(session).load_active()
 
     assert error.value.code == "duplicate_active_scores"
+
+
+@pytest.mark.anyio
+async def test_repository_records_privacy_safe_decision_snapshot() -> None:
+    session = AsyncMock(spec=AsyncSession)
+    request = ChatCompletionRequest(
+        messages=[ChatMessage(role="user", content="Explain this clearly")]
+    )
+    plan = ProviderRouter((MockProvider(),)).plan(request)
+    request_id = uuid4()
+    client_id = uuid4()
+    created_at = datetime(2026, 10, 29, 12, tzinfo=UTC)
+
+    snapshot = await DatabaseRoutingEvidenceRepository(session).record_decision(
+        request_id=request_id,
+        client_id=client_id,
+        plan=plan,
+        created_at=created_at,
+    )
+
+    assert isinstance(snapshot, RoutingDecisionSnapshot)
+    assert snapshot.request_id == request_id
+    assert snapshot.client_id == client_id
+    assert snapshot.selected_provider == "mock"
+    assert snapshot.selected_model == "mock-1"
+    assert snapshot.policy_version == "baseline-v1"
+    assert snapshot.candidate_count == 1
+    assert not hasattr(snapshot, "prompt")
+    session.add.assert_called_once_with(snapshot)
+    session.flush.assert_awaited_once()
+
+
+@pytest.mark.anyio
+async def test_repository_lists_only_requested_client_decisions() -> None:
+    session = AsyncMock(spec=AsyncSession)
+    rows = Mock()
+    rows.all.return_value = []
+    session.scalars.return_value = rows
+    repository = DatabaseRoutingEvidenceRepository(session)
+    assert await repository.list_decisions(client_id=uuid4(), limit=25) == []
+    session.scalars.assert_awaited_once()
+    with pytest.raises(ValueError, match="between 1 and 200"):
+        await repository.list_decisions(client_id=uuid4(), limit=201)
