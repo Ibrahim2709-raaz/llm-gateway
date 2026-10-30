@@ -60,6 +60,7 @@ def test_production_disables_api_docs_and_enables_hsts(
         app_env="production",
         gateway_api_key_pepper="a-long-production-secret",
         trusted_hosts="api.example.com",
+        portal_action_token_delivery="disabled",
     )
     monkeypatch.setattr(main_module, "get_settings", lambda: settings)
 
@@ -82,4 +83,5 @@ def test_production_rejects_wildcard_trusted_hosts() -> None:
             app_env="production",
             gateway_api_key_pepper="a-long-production-secret",
             trusted_hosts="*",
+            portal_action_token_delivery="disabled",
         )

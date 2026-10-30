@@ -195,6 +195,19 @@ a visible prefix and an HMAC-SHA256 digest. Set `GATEWAY_API_KEY_PEPPER` to a
 stable secret in every environment, and never change it without rotating all
 API keys. The development default is rejected when `APP_ENV=production`.
 
+Version 3 also exposes the first portal authentication API under
+`/v1/portal/auth`: organization-owner registration, email verification, login,
+logout, current-account inspection, and active-organization switching. Browser
+sessions use an HTTP-only cookie plus a session-bound `X-CSRF-Token` for every
+authenticated mutation. Raw session and action tokens are never stored in the
+database.
+
+For local development, `PORTAL_ACTION_TOKEN_DELIVERY=response` returns the
+one-time email verification token from registration so the flow can be tested
+without an email vendor. Production refuses to start in that mode. Set it to
+`disabled` in production until a real email-delivery adapter is configured;
+registration then fails closed instead of exposing or losing a token.
+
 Each authenticated customer is allowed 60 requests per 60-second window by
 default. Configure this with `REQUEST_RATE_LIMIT` and
 `REQUEST_RATE_LIMIT_WINDOW_SECONDS`. Successful responses include limit,

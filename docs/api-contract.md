@@ -23,8 +23,10 @@ Authorization: Bearer gw_live_<43-character-secret>
 ```
 
 Provider credentials are configured on the gateway and are never supplied by
-clients. Every endpoint except health checks and Prometheus metrics requires a
-gateway API key.
+clients. Gateway traffic and usage endpoints require a gateway API key. The
+separate Version 3 portal endpoints use an HTTP-only browser session cookie and
+a session-bound CSRF token for mutations. Health checks, registration, login,
+email verification, and Prometheus metrics do not require a gateway API key.
 
 Create a client and its first key after applying database migrations:
 

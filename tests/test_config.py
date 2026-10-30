@@ -154,8 +154,20 @@ def test_production_accepts_a_custom_api_key_pepper() -> None:
         app_env="production",
         gateway_api_key_pepper="a-long-production-secret",
         trusted_hosts="api.example.com,gateway",
+        portal_action_token_delivery="disabled",
     )
 
     assert settings.gateway_api_key_pepper.get_secret_value() == "a-long-production-secret"
     assert "a-long-production-secret" not in repr(settings)
     assert settings.trusted_host_list == ["api.example.com", "gateway"]
+
+
+def test_production_forbids_returning_action_tokens_in_api_responses() -> None:
+    with pytest.raises(ValidationError, match="PORTAL_ACTION_TOKEN_DELIVERY"):
+        Settings(
+            _env_file=None,
+            app_env="production",
+            gateway_api_key_pepper="a-long-production-secret",
+            trusted_hosts="api.example.com",
+            portal_action_token_delivery="response",
+        )

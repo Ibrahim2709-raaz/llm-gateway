@@ -44,6 +44,7 @@ class Settings(BaseSettings):
     browser_session_touch_interval_seconds: int = Field(default=300, ge=30, le=86_400)
     email_verification_ttl_seconds: int = Field(default=86_400, ge=300, le=604_800)
     password_reset_ttl_seconds: int = Field(default=3_600, ge=300, le=86_400)
+    portal_action_token_delivery: Literal["response", "disabled"] = "response"
     openai_enabled: bool = False
     openai_api_key: SecretStr | None = None
     openai_model: str = Field(default="gpt-5.6-terra", min_length=1)
@@ -116,6 +117,8 @@ class Settings(BaseSettings):
             and self.gateway_api_key_pepper.get_secret_value() == DEFAULT_DEVELOPMENT_API_KEY_PEPPER
         ):
             raise ValueError("GATEWAY_API_KEY_PEPPER must be changed in production")
+        if self.app_env == "production" and self.portal_action_token_delivery == "response":
+            raise ValueError("PORTAL_ACTION_TOKEN_DELIVERY=response is forbidden in production")
         if not self.trusted_host_list:
             raise ValueError("TRUSTED_HOSTS must contain at least one host")
         if self.app_env == "production" and "*" in self.trusted_host_list:
