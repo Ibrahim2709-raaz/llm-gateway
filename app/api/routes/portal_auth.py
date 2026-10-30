@@ -16,6 +16,8 @@ from app.identity.accounts import (
     authenticate_account,
     list_active_memberships,
     register_organization_owner,
+    request_password_reset,
+    reset_account_password,
     verify_account_email,
 )
 from app.identity.dependencies import (
@@ -37,6 +39,9 @@ from app.schemas.portal_auth import (
     LoginRequest,
     MessageResponse,
     OrganizationSummary,
+    PasswordResetConfirmRequest,
+    PasswordResetRequestBody,
+    PasswordResetRequestResponse,
     RegisterAccountRequest,
     RegisterAccountResponse,
     VerifyEmailRequest,
@@ -164,6 +169,69 @@ async def verify_email(
             code="invalid_verification_token",
         ) from exc
     return MessageResponse(message="Email verified. You can now sign in.")
+
+
+@router.post(
+    "/password-reset/request",
+    response_model=PasswordResetRequestResponse,
+    operation_id="requestPortalPasswordReset",
+)
+async def password_reset_request(
+    payload: PasswordResetRequestBody,
+    database: Annotated[AsyncSession, Depends(get_database_session)],
+    settings: Annotated[Settings, Depends(get_settings)],
+) -> PasswordResetRequestResponse:
+    if settings.portal_action_token_delivery == "disabled":
+        raise GatewayError(
+            "Password reset is unavailable until email delivery is configured.",
+            code="email_delivery_unavailable",
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+        )
+    try:
+        requested = await request_password_reset(
+            database,
+            email=payload.email,
+            reset_ttl=timedelta(seconds=settings.password_reset_ttl_seconds),
+        )
+        await database.commit()
+    except ValueError as exc:
+        await database.rollback()
+        raise GatewayError(
+            "Account details are invalid.",
+            code="invalid_account_details",
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+        ) from exc
+    return PasswordResetRequestResponse(
+        message="If the account exists, password reset instructions are available.",
+        reset_token=requested.delivery.value if requested.delivery is not None else None,
+    )
+
+
+@router.post(
+    "/password-reset/confirm",
+    response_model=MessageResponse,
+    operation_id="confirmPortalPasswordReset",
+)
+async def password_reset_confirm(
+    payload: PasswordResetConfirmRequest,
+    database: Annotated[AsyncSession, Depends(get_database_session)],
+    hasher: Annotated[ScryptPasswordHasher, Depends(get_password_hasher)],
+) -> MessageResponse:
+    try:
+        await reset_account_password(
+            database,
+            reset_token=payload.token.get_secret_value(),
+            new_password=payload.new_password.get_secret_value(),
+            password_hasher=hasher,
+        )
+        await database.commit()
+    except (ActionTokenError, InvalidCredentialsError, ValueError) as exc:
+        await database.rollback()
+        raise GatewayError(
+            "The password reset link is invalid or expired.",
+            code="invalid_password_reset_token",
+        ) from exc
+    return MessageResponse(message="Password changed. Sign in again on every device.")
 
 
 @router.post("/login", response_model=BrowserSessionResponse, operation_id="loginPortalAccount")

@@ -11,19 +11,24 @@ from app.api.routes.portal_auth import (
     current_account,
     login,
     logout,
+    password_reset_request,
     register_account,
 )
 from app.core.config import Settings
 from app.core.errors import GatewayError
 from app.db.models import BrowserSession, Organization, OrganizationMembership, User
-from app.identity.accounts import AccountLogin, RegisteredAccount
+from app.identity.accounts import AccountLogin, PasswordResetRequest, RegisteredAccount
 from app.identity.authorization import Principal
 from app.identity.dependencies import BrowserIdentity
 from app.identity.passwords import ScryptPasswordHasher
 from app.identity.sessions import AuthenticatedBrowserSession, IssuedBrowserSession
 from app.identity.tokens import issue_opaque_token
 from app.main import create_app
-from app.schemas.portal_auth import LoginRequest, RegisterAccountRequest
+from app.schemas.portal_auth import (
+    LoginRequest,
+    PasswordResetRequestBody,
+    RegisterAccountRequest,
+)
 
 NOW = datetime(2026, 10, 29, 12, tzinfo=UTC)
 
@@ -85,6 +90,8 @@ def test_portal_auth_routes_are_in_openapi_contract() -> None:
     assert "/v1/portal/auth/register" in paths
     assert "/v1/portal/auth/verify-email" in paths
     assert "/v1/portal/auth/login" in paths
+    assert "/v1/portal/auth/password-reset/request" in paths
+    assert "/v1/portal/auth/password-reset/confirm" in paths
     assert "/v1/portal/auth/logout" in paths
     assert "/v1/portal/auth/me" in paths
 
@@ -142,6 +149,24 @@ async def test_registration_is_disabled_without_token_delivery() -> None:
             ScryptPasswordHasher(log_n=14),
         )
     assert error.value.status_code == 503
+
+
+@pytest.mark.anyio
+async def test_password_reset_request_does_not_reveal_unknown_account(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    operation = AsyncMock(return_value=PasswordResetRequest(delivery=None))
+    monkeypatch.setattr("app.api.routes.portal_auth.request_password_reset", operation)
+    database = MagicMock()
+    database.commit = AsyncMock()
+    database.rollback = AsyncMock()
+    response = await password_reset_request(
+        PasswordResetRequestBody(email="missing@example.com"),
+        database,
+        Settings(_env_file=None, app_env="test"),
+    )
+    assert response.reset_token is None
+    assert response.message.startswith("If the account exists")
 
 
 @pytest.mark.anyio

@@ -11,6 +11,8 @@ from app.identity.accounts import (
     authenticate_account,
     normalize_organization_slug,
     register_organization_owner,
+    request_password_reset,
+    reset_account_password,
     verify_account_email,
 )
 from app.identity.passwords import ScryptPasswordHasher
@@ -173,3 +175,55 @@ async def test_verify_account_email_consumes_token_and_marks_user() -> None:
     )
     assert verified.email_verified_at == NOW + timedelta(minutes=1)
     assert token.consumed_at == NOW + timedelta(minutes=1)
+
+
+@pytest.mark.anyio
+async def test_password_reset_request_is_generic_for_unknown_user() -> None:
+    database = MagicMock()
+    database.scalar = AsyncMock(return_value=None)
+    requested = await request_password_reset(
+        database,
+        email="missing@example.com",
+        reset_ttl=timedelta(hours=1),
+        now=NOW,
+    )
+    assert requested.delivery is None
+    database.add.assert_not_called()
+
+
+@pytest.mark.anyio
+async def test_reset_password_revokes_sessions_and_audits_change() -> None:
+    user = User(
+        id=uuid4(),
+        email_normalized="owner@example.com",
+        display_name="Owner",
+        password_hash=FAST_HASHER.hash("old-long-enough-password"),
+        status="active",
+        email_verified_at=NOW,
+    )
+    token = UserActionToken(
+        user_id=user.id,
+        purpose="password_reset",
+        token_prefix="password_reset_test",
+        token_hash="hash",
+        created_at=NOW,
+        expires_at=NOW + timedelta(hours=1),
+    )
+    database = MagicMock()
+    database.scalar = AsyncMock(return_value=token)
+    database.get = AsyncMock(return_value=user)
+    database.execute = AsyncMock()
+    database.flush = AsyncMock()
+
+    reset = await reset_account_password(
+        database,
+        reset_token="raw-token",
+        new_password="new-long-enough-password",
+        password_hasher=FAST_HASHER,
+        now=NOW + timedelta(minutes=5),
+    )
+    assert reset is user
+    assert FAST_HASHER.verify("new-long-enough-password", user.password_hash or "")
+    assert token.consumed_at == NOW + timedelta(minutes=5)
+    assert database.execute.await_count == 1
+    assert database.add.call_count == 1

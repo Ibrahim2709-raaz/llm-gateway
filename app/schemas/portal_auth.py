@@ -31,6 +31,20 @@ class LoginRequest(PortalSchema):
     password: SecretStr = Field(min_length=12, max_length=1_024)
 
 
+class PasswordResetRequestBody(PortalSchema):
+    email: str = Field(min_length=3, max_length=320)
+
+
+class PasswordResetRequestResponse(PortalSchema):
+    message: str
+    reset_token: str | None = None
+
+
+class PasswordResetConfirmRequest(PortalSchema):
+    token: SecretStr = Field(min_length=16, max_length=1_024)
+    new_password: SecretStr = Field(min_length=12, max_length=1_024)
+
+
 class OrganizationSummary(PortalSchema):
     id: UUID
     slug: str

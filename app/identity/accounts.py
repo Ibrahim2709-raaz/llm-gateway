@@ -5,10 +5,11 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta
 from uuid import UUID, uuid4
 
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import (
+    BrowserSession,
     Client,
     Organization,
     OrganizationMembership,
@@ -51,6 +52,11 @@ class AccountLogin:
     user: User
     organization: Organization
     membership: OrganizationMembership
+
+
+@dataclass(frozen=True, slots=True)
+class PasswordResetRequest:
+    delivery: IssuedUserActionToken | None
 
 
 def normalize_organization_slug(value: str) -> str:
@@ -203,6 +209,10 @@ async def authenticate_account(
     ):
         raise InvalidCredentialsError("Email or password is incorrect")
 
+    if hasher.needs_rehash(encoded_hash):
+        user.password_hash = hasher.hash(password)
+        await database.flush()
+
     statement = (
         select(OrganizationMembership, Organization)
         .join(Organization, Organization.id == OrganizationMembership.organization_id)
@@ -219,6 +229,63 @@ async def authenticate_account(
         raise InvalidCredentialsError("Account has no active organization")
     membership, organization = row
     return AccountLogin(user=user, organization=organization, membership=membership)
+
+
+async def request_password_reset(
+    database: AsyncSession,
+    *,
+    email: str,
+    reset_ttl: timedelta,
+    now: datetime | None = None,
+) -> PasswordResetRequest:
+    normalized_email = normalize_email(email)
+    user = await database.scalar(select(User).where(User.email_normalized == normalized_email))
+    if user is None or user.status != "active" or user.password_hash is None:
+        return PasswordResetRequest(delivery=None)
+    delivery = await issue_user_action_token(
+        database,
+        user=user,
+        purpose="password_reset",
+        ttl=reset_ttl,
+        now=now,
+    )
+    return PasswordResetRequest(delivery=delivery)
+
+
+async def reset_account_password(
+    database: AsyncSession,
+    *,
+    reset_token: str,
+    new_password: str,
+    password_hasher: ScryptPasswordHasher | None = None,
+    now: datetime | None = None,
+) -> User:
+    current_time = now or utc_now()
+    action_token = await consume_user_action_token(
+        database,
+        value=reset_token,
+        purpose="password_reset",
+        now=current_time,
+    )
+    user = await database.get(User, action_token.user_id)
+    if user is None or user.status != "active":
+        raise InvalidCredentialsError("Account is unavailable")
+    hasher = password_hasher or ScryptPasswordHasher()
+    user.password_hash = hasher.hash(new_password)
+    await database.execute(
+        update(BrowserSession)
+        .where(BrowserSession.user_id == user.id, BrowserSession.revoked_at.is_(None))
+        .values(revoked_at=current_time)
+    )
+    await append_audit_event(
+        database,
+        principal=Principal(actor_type="user", actor_id=user.id),
+        action="user.password_reset",
+        resource_type="user",
+        resource_id=str(user.id),
+    )
+    await database.flush()
+    return user
 
 
 async def list_active_memberships(
