@@ -212,6 +212,11 @@ through `/v1/portal/organizations/{id}/api-keys`. A new plaintext key is shown
 exactly once; subsequent responses expose only its safe prefix and metadata,
 and every creation or revocation produces an organization audit event.
 
+All organization roles can view monthly request, token, estimated provider-cost,
+budget, and remaining-allowance totals at
+`/v1/portal/organizations/{id}/usage`. Owners can update monthly budgets through
+the adjacent `/budgets/{period}` endpoint; changes are row-locked and audited.
+
 For local development, `PORTAL_ACTION_TOKEN_DELIVERY=response` returns the
 one-time email verification token from registration so the flow can be tested
 without an email vendor. Production refuses to start in that mode. Set it to
