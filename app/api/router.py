@@ -8,6 +8,7 @@ from app.api.routes import (
     portal_auth,
     portal_keys,
     portal_members,
+    portal_playground,
     portal_routing,
     portal_usage,
     usage,
@@ -20,6 +21,7 @@ api_router.include_router(usage.router)
 api_router.include_router(portal_auth.router)
 api_router.include_router(portal_audit.router)
 api_router.include_router(portal_members.router)
+api_router.include_router(portal_playground.router)
 api_router.include_router(portal_keys.router)
 api_router.include_router(portal_usage.router)
 api_router.include_router(portal_routing.router)

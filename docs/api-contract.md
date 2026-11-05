@@ -51,6 +51,19 @@ Registration, verification resend, and password-reset request routes also use a
 separate per-source Redis rate limit and fail closed when a safe limit decision
 cannot be made.
 
+Authenticated organization owners and developers can use the portal playground
+without placing a gateway API key in browser storage. `POST
+/v1/portal/organizations/{organization_id}/playground/preview` computes the
+route and maximum estimated provider cost without calling a provider, consuming
+the request rate limit, reserving budget, or recording a shadow decision. `POST
+/v1/portal/organizations/{organization_id}/playground/completions` delegates to
+the normal chat service and therefore applies the organization's rate limit,
+budget, cache, routing preference, retries, fallbacks, usage accounting, and
+observability. Both routes require the HTTP-only portal session, its CSRF token,
+and membership in the organization named by the path. Billing viewers receive
+`403`; cross-organization requests receive the same `404` used by other portal
+resources.
+
 Create a client and its first key after applying database migrations:
 
 ```bash

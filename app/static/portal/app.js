@@ -99,9 +99,12 @@ function renderOrganizationSwitcher() {
 
 function applyRoleVisibility() {
   const isOwner = state.organization?.role === "owner";
+  const canDevelop = ["owner", "developer"].includes(state.organization?.role);
   $$(".owner-only").forEach((element) => element.classList.toggle("hidden", !isOwner));
+  $$(".developer-only").forEach((element) => element.classList.toggle("hidden", !canDevelop));
   $('[data-view="audit"]').classList.toggle("hidden", !isOwner);
   if (!isOwner && $('[data-page="audit"]:not(.hidden)')) showPage("overview");
+  if (!canDevelop && $('[data-page="playground"]:not(.hidden)')) showPage("overview");
 }
 
 async function loadAccount() {
@@ -168,6 +171,7 @@ function showPage(name) {
 
 async function loadPage(name) {
   if (["overview", "usage"].includes(name)) return loadOverview();
+  if (name === "playground") return;
   if (name === "keys") return loadKeys();
   if (name === "routing") return loadRouting();
   if (name === "team") return loadMembers();
@@ -210,6 +214,68 @@ function openDialog({ eyebrow, title, content }) {
   $("#dialog-title").textContent = title;
   $("#dialog-body").innerHTML = content;
   $("#form-dialog").showModal();
+}
+
+function playgroundPayload() {
+  const form = $("#playground-form");
+  const values = new FormData(form);
+  const systemPrompt = String(values.get("system_prompt") || "").trim();
+  const userPrompt = String(values.get("prompt") || "").trim();
+  if (!userPrompt) throw new Error("Enter a user prompt first.");
+  const messages = [];
+  if (systemPrompt) messages.push({ role: "system", content: systemPrompt });
+  messages.push({ role: "user", content: userPrompt });
+  const allowedProviders = $$("input[name='provider']:checked", form).map((input) => input.value);
+  const maxCost = String(values.get("max_cost_usd") || "").trim();
+  const routing = {
+    strategy: values.get("strategy"),
+    disable_cache: values.get("disable_cache") === "on",
+  };
+  if (allowedProviders.length) routing.allowed_providers = allowedProviders;
+  if (maxCost) routing.max_cost_usd = Number(maxCost);
+  return {
+    model: String(values.get("model") || "auto").trim() || "auto",
+    messages,
+    temperature: Number(values.get("temperature")),
+    max_tokens: Number(values.get("max_tokens")),
+    routing,
+  };
+}
+
+function renderPlaygroundPreview(preview) {
+  $("#playground-preview").classList.remove("hidden");
+  $("#preview-model").textContent = `${preview.selected_provider} / ${preview.selected_model}`;
+  $("#preview-cost").textContent = `≤ ${formatMoney(preview.estimated_cost_usd)}`;
+  $("#preview-task").textContent = `${titleCase(preview.task_category)} · ${titleCase(preview.difficulty)}`;
+  $("#preview-policy").textContent = `${preview.policy_version} · ${preview.score_version}`;
+  $("#preview-candidates").textContent = `${formatNumber(preview.eligible_candidate_count)} eligible model${preview.eligible_candidate_count === 1 ? "" : "s"}`;
+  $("#preview-reasons").innerHTML = preview.reason_codes.length
+    ? preview.reason_codes.map((reason) => `<li>${escapeHtml(titleCase(reason))}</li>`).join("")
+    : `<li>${escapeHtml(titleCase(preview.routing_strategy))} strategy</li>`;
+}
+
+function renderPlaygroundResponse(result, elapsedMs) {
+  const gateway = result.gateway;
+  const usage = result.usage;
+  const statusBadge = $("#playground-status");
+  statusBadge.textContent = gateway.cached ? "Cached" : "Completed";
+  statusBadge.className = `status-badge ${gateway.cached ? "neutral" : "success"}`;
+  $("#playground-metrics").classList.remove("hidden");
+  $("#response-model").textContent = `${gateway.provider} / ${result.model}`;
+  $("#response-cost").textContent = formatMoney(gateway.cost_usd);
+  $("#response-tokens").textContent = formatNumber(usage.total_tokens);
+  $("#response-latency").textContent = `${Math.round(elapsedMs)} ms`;
+  const output = $("#playground-output");
+  output.classList.remove("empty-state");
+  output.textContent = result.choices[0]?.message?.content || "The provider returned no text.";
+  $("#playground-routing").classList.remove("hidden");
+  $("#response-route-summary").textContent = `${titleCase(gateway.task_category)} · ${titleCase(gateway.task_complexity)} · ${Math.round(gateway.classification_confidence * 100)}% confidence · ${gateway.routing_policy_version} · ${gateway.score_version}`;
+  $("#response-reasons").innerHTML = gateway.routing_reasons.length
+    ? gateway.routing_reasons.map((reason) => `<li>${escapeHtml(titleCase(reason))}</li>`).join("")
+    : `<li>${escapeHtml(titleCase(gateway.routing_strategy))} strategy</li>`;
+  $("#response-attempts").innerHTML = gateway.attempts.length
+    ? gateway.attempts.map((attempt) => `<li>${escapeHtml(attempt.provider)} / ${escapeHtml(attempt.model)} — ${escapeHtml(titleCase(attempt.outcome))}</li>`).join("")
+    : "<li>No provider call — response served from cache.</li>";
 }
 
 function bindEvents() {
@@ -338,6 +404,32 @@ function bindEvents() {
       state.preference = strategy; renderPreference(strategy); toast("Routing preference saved.");
     } catch (error) { toast(error.message, true); }
     finally { setBusy(event.currentTarget, false); }
+  });
+
+  $("#preview-request").addEventListener("click", async (event) => {
+    const button = event.currentTarget;
+    const previousLabel = button.textContent;
+    button.disabled = true; button.textContent = "Planning…";
+    try {
+      const preview = await api(`/v1/portal/organizations/${state.organization.id}/playground/preview`, { method: "POST", body: playgroundPayload() });
+      renderPlaygroundPreview(preview); toast("Route preview updated.");
+    } catch (error) { toast(error.message, true); }
+    finally { button.disabled = false; button.textContent = previousLabel; }
+  });
+
+  $("#playground-form").addEventListener("submit", async (event) => {
+    event.preventDefault(); setBusy(event.currentTarget, true);
+    const statusBadge = $("#playground-status");
+    statusBadge.textContent = "Running…"; statusBadge.className = "status-badge warning";
+    const started = performance.now();
+    try {
+      const result = await api(`/v1/portal/organizations/${state.organization.id}/playground/completions`, { method: "POST", body: playgroundPayload() });
+      renderPlaygroundResponse(result, performance.now() - started);
+      loadOverview().catch((error) => toast(error.message, true));
+    } catch (error) {
+      statusBadge.textContent = "Failed"; statusBadge.className = "status-badge danger";
+      toast(error.message, true);
+    } finally { setBusy(event.currentTarget, false); }
   });
 
   $("#new-key-button").addEventListener("click", openCreateKeyDialog);

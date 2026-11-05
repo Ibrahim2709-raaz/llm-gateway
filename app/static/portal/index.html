@@ -115,6 +115,7 @@
         <div class="sidebar-brand"><span class="brand-mark small">LG</span><span>LLM Gateway</span></div>
         <nav aria-label="Portal navigation">
           <button class="nav-item is-active" data-view="overview"><span aria-hidden="true">⌂</span> Overview</button>
+          <button class="nav-item developer-only" data-view="playground"><span aria-hidden="true">▶</span> Playground</button>
           <button class="nav-item" data-view="usage"><span aria-hidden="true">◫</span> Usage & cost</button>
           <button class="nav-item" data-view="routing"><span aria-hidden="true">◇</span> Intelligent routing</button>
           <button class="nav-item" data-view="keys"><span aria-hidden="true">⌁</span> API keys</button>
@@ -155,6 +156,42 @@
               <form id="budget-form" class="inline-form owner-only"><label>Monthly limit (USD)<input name="limit_usd" type="number" min="0.01" step="0.01" required></label><label>Alert at %<input name="alert_threshold_percent" type="number" min="1" max="100" value="80" required></label><button class="button secondary" type="submit">Update budget</button></form>
             </article>
             <article class="card"><p class="eyebrow">ROUTING DEFAULT</p><h2 id="overview-strategy">Balanced</h2><p class="muted">Applied when a request does not choose its own strategy.</p><button class="text-button aligned" type="button" data-go-view="routing">Review routing →</button></article>
+          </div>
+        </section>
+
+        <section class="page hidden" data-page="playground">
+          <div class="page-heading"><div><p class="eyebrow blue">REQUEST PLAYGROUND</p><h1>Test the gateway without exposing a key.</h1><p class="muted">Preview routing and maximum estimated provider cost, then run the same governed pipeline your applications use.</p></div><span class="privacy-note">Prompts are not stored by the portal</span></div>
+          <div class="playground-grid">
+            <form id="playground-form" class="card playground-form">
+              <div class="card-heading"><div><p class="eyebrow">COMPOSER</p><h2>Request</h2></div><span class="status-badge neutral">Non-streaming</span></div>
+              <label>System instructions <textarea name="system_prompt" rows="3" maxlength="20000" placeholder="You are a concise technical assistant."></textarea></label>
+              <label>User prompt <textarea name="prompt" rows="8" maxlength="100000" placeholder="Ask the gateway something…" required></textarea></label>
+              <div class="form-grid two">
+                <label>Routing goal<select name="strategy"><option value="balanced">Balanced</option><option value="cost">Lowest cost</option><option value="latency">Lowest latency</option><option value="quality">Highest quality</option></select></label>
+                <label>Model<input name="model" value="auto" placeholder="auto"></label>
+                <label>Maximum output tokens<input name="max_tokens" type="number" min="1" max="32768" value="512" required></label>
+                <label>Temperature<input name="temperature" type="number" min="0" max="2" step="0.1" value="0.7" required></label>
+                <label>Per-request cost ceiling (USD)<input name="max_cost_usd" type="number" min="0" step="0.000001" placeholder="No extra ceiling"></label>
+                <label class="checkbox-row"><input name="disable_cache" type="checkbox"><span>Bypass response cache</span></label>
+              </div>
+              <fieldset class="provider-fieldset"><legend>Allowed providers</legend><div class="provider-options"><label><input name="provider" type="checkbox" value="openai" checked> OpenAI</label><label><input name="provider" type="checkbox" value="anthropic" checked> Anthropic</label><label><input name="provider" type="checkbox" value="local" checked> Local</label><label><input name="provider" type="checkbox" value="mock" checked> Mock</label></div><small>Unavailable providers are ignored automatically.</small></fieldset>
+              <div class="playground-actions"><button id="preview-request" class="button secondary" type="button">Preview route</button><button class="button primary" type="submit">Run request</button></div>
+            </form>
+
+            <div class="playground-results">
+              <article id="playground-preview" class="card hidden">
+                <div class="card-heading"><div><p class="eyebrow">ROUTE PREVIEW</p><h2 id="preview-model">—</h2></div><strong id="preview-cost" class="cost-callout">—</strong></div>
+                <div class="preview-facts"><span id="preview-task">—</span><span id="preview-policy">—</span><span id="preview-candidates">—</span></div>
+                <ul id="preview-reasons" class="reason-list"></ul>
+                <p class="muted preview-note">This is a maximum estimate based on the selected model and output limit. Previewing does not call a provider or reserve budget.</p>
+              </article>
+              <article class="card playground-response-card">
+                <div class="card-heading"><div><p class="eyebrow">RESPONSE</p><h2>Assistant output</h2></div><span id="playground-status" class="status-badge neutral">Ready</span></div>
+                <div id="playground-metrics" class="response-metrics hidden"><div><span>Provider / model</span><strong id="response-model">—</strong></div><div><span>Provider cost</span><strong id="response-cost">—</strong></div><div><span>Tokens</span><strong id="response-tokens">—</strong></div><div><span>Round trip</span><strong id="response-latency">—</strong></div></div>
+                <div id="playground-output" class="assistant-output empty-state">Run a request to see the model response.</div>
+                <div id="playground-routing" class="response-routing hidden"><div><p class="eyebrow">WHY THIS ROUTE</p><p id="response-route-summary" class="muted"></p><ul id="response-reasons" class="reason-list"></ul></div><div><p class="eyebrow">ATTEMPTS</p><ol id="response-attempts" class="attempt-list"></ol></div></div>
+              </article>
+            </div>
           </div>
         </section>
 

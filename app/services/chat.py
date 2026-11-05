@@ -1,5 +1,6 @@
 import time
 from collections.abc import Callable
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from uuid import UUID, uuid4
 
@@ -37,6 +38,12 @@ from app.schemas.chat import (
 from app.usage.service import UsageTracker
 
 logger = structlog.get_logger(__name__)
+
+
+@dataclass(frozen=True, slots=True)
+class ChatPlanPreview:
+    request: ChatCompletionRequest
+    plan: RoutingPlan
 
 
 class ChatCompletionService:
@@ -275,10 +282,29 @@ class ChatCompletionService:
             await self.response_cache.set(client_id, request, response)
         return response
 
-    async def _plan(self, request: ChatCompletionRequest, client_id: UUID) -> RoutingPlan:
+    async def preview(
+        self,
+        request: ChatCompletionRequest,
+        client_id: UUID,
+    ) -> ChatPlanPreview:
+        """Plan a request without calling a provider or reserving customer budget."""
+
+        if self.routing_preference_resolver is not None:
+            request = await self.routing_preference_resolver.apply(client_id, request)
+        plan = await self._plan(request, client_id, record_shadow=False)
+        return ChatPlanPreview(request=request, plan=plan)
+
+    async def _plan(
+        self,
+        request: ChatCompletionRequest,
+        client_id: UUID,
+        *,
+        record_shadow: bool = True,
+    ) -> RoutingPlan:
         if self.intelligent_routing_shadow_enabled:
             baseline = self.router.plan(request)
-            await self._record_shadow_decision(request, baseline)
+            if record_shadow:
+                await self._record_shadow_decision(request, baseline)
             return baseline
         if not self._live_routing_selected(client_id):
             return self.router.plan(request)

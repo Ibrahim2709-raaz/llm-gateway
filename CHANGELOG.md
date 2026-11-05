@@ -6,6 +6,10 @@ All notable changes to this project are documented in this file.
 
 ### Added
 
+- A customer request playground for organization owners and developers, with a
+  no-provider route and cost preview plus governed completions that reuse the
+  production rate-limit, budget, cache, routing, fallback, usage, and
+  observability pipeline without exposing gateway API keys to the browser.
 - Production SMTP delivery for portal verification, password-reset, and
   organization-invitation links, including a non-enumerating verification
   resend flow, direct portal link handling, and separate Redis-backed abuse

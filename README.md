@@ -235,6 +235,18 @@ Owners and developers can set an organization default of `balanced`, `cost`,
 applies that default only when a chat request omits `routing.strategy`; an
 explicit per-request strategy always takes precedence.
 
+The customer portal includes a governed request playground for owners and
+developers. Route preview shows the model, estimated maximum provider cost,
+task classification, evidence versions, and safe selection reasons without
+calling a provider or reserving budget. Running the request uses the same
+customer-isolated rate limit, budget reservation, cache, intelligent router,
+retry and fallback path, usage accounting, and observability as the public chat
+API. The browser authenticates with its HTTP-only portal session and never
+receives an organization gateway key. Results show actual token usage,
+estimated provider cost, cache status, route reasons, and provider attempts.
+The current playground deliberately supports non-streaming text completions,
+matching the gateway's current API contract.
+
 Organization owners can review the portal audit feed at
 `/v1/portal/organizations/{id}/audit-events`. Audit metadata is filtered by
 organization and rejects sensitive fields; PostgreSQL now also blocks every
