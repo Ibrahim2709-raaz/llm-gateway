@@ -21,7 +21,7 @@ class InvitationResponse(MemberSchema):
     email: str
     role: OrganizationRole
     expires_at: str
-    invitation_token: str
+    invitation_token: str | None = None
 
 
 class AcceptInvitationRequest(MemberSchema):

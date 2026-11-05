@@ -38,6 +38,19 @@ requires both the session-bound CSRF token and an exact email match. Portal
 links place invitation secrets in the URL fragment so they are not sent in HTTP
 request targets or referrer headers.
 
+Email verification and password-reset links follow the same fragment-based
+pattern. With `PORTAL_ACTION_TOKEN_DELIVERY=smtp`, the gateway commits the
+one-time token before contacting the SMTP server, never returns that token in
+the API response, and lets the portal consume `#verify=...`, `#reset=...`, or
+`#invitation=...`. A failed registration or invitation delivery is reported as
+`503 email_delivery_failed`; the committed registration can recover through
+the generic verification-resend endpoint, while an owner can safely replace a
+failed invitation. Password-reset and verification-resend responses stay
+generic even when delivery fails so they cannot be used to enumerate accounts.
+Registration, verification resend, and password-reset request routes also use a
+separate per-source Redis rate limit and fail closed when a safe limit decision
+cannot be made.
+
 Create a client and its first key after applying database migrations:
 
 ```bash

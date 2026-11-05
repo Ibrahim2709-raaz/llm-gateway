@@ -26,6 +26,15 @@ class VerifyEmailRequest(PortalSchema):
     token: SecretStr = Field(min_length=16, max_length=1_024)
 
 
+class ResendVerificationRequest(PortalSchema):
+    email: str = Field(min_length=3, max_length=320)
+
+
+class ResendVerificationResponse(PortalSchema):
+    message: str
+    verification_token: str | None = None
+
+
 class LoginRequest(PortalSchema):
     email: str = Field(min_length=3, max_length=320)
     password: SecretStr = Field(min_length=12, max_length=1_024)

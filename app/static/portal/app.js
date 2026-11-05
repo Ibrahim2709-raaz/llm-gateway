@@ -216,6 +216,7 @@ function bindEvents() {
   $$(".auth-tab").forEach((tab) => tab.addEventListener("click", () => showAuthPanel(tab.dataset.authTab)));
   $$('[data-return-login]').forEach((button) => button.addEventListener("click", () => showAuthPanel("login")));
   $("#show-reset").addEventListener("click", () => showAuthPanel("reset"));
+  $("#show-resend").addEventListener("click", () => showAuthPanel("resend"));
   $$("[data-view]").forEach((button) => button.addEventListener("click", () => showPage(button.dataset.view)));
   $$('[data-go-view]').forEach((button) => button.addEventListener("click", () => showPage(button.dataset.goView)));
   $("#menu-button").addEventListener("click", () => $(".sidebar").classList.toggle("is-open"));
@@ -239,9 +240,20 @@ function bindEvents() {
       if (result.verification_token) {
         $("#verify-form [name='token']").value = result.verification_token;
         showAuthPanel("verify");
+        toast("Organization created. Verify your email to continue.");
+      } else {
+        $("#login-form [name='email']").value = values.email;
+        showAuthPanel("login");
+        toast("Organization created. Check your email for the verification link.");
       }
-      toast("Organization created. Verify your email to continue.");
-    } catch (error) { toast(error.message, true); }
+    } catch (error) {
+      toast(error.message, true);
+      if (error.code === "email_delivery_failed") {
+        const email = new FormData(event.currentTarget).get("email");
+        $("#resend-verification-form [name='email']").value = email;
+        showAuthPanel("resend");
+      }
+    }
     finally { setBusy(event.currentTarget, false); }
   });
 
@@ -264,6 +276,22 @@ function bindEvents() {
       const token = new FormData(event.currentTarget).get("token");
       await api("/v1/portal/auth/verify-email", { method: "POST", body: { token } });
       toast("Email verified. Sign in to continue."); showAuthPanel("login");
+    } catch (error) { toast(error.message, true); }
+    finally { setBusy(event.currentTarget, false); }
+  });
+
+  $("#resend-verification-form").addEventListener("submit", async (event) => {
+    event.preventDefault(); setBusy(event.currentTarget, true);
+    try {
+      const email = new FormData(event.currentTarget).get("email");
+      const result = await api("/v1/portal/auth/verify-email/resend", { method: "POST", body: { email } });
+      if (result.verification_token) {
+        $("#verify-form [name='token']").value = result.verification_token;
+        showAuthPanel("verify");
+      } else {
+        showAuthPanel("login");
+      }
+      toast(result.message);
     } catch (error) { toast(error.message, true); }
     finally { setBusy(event.currentTarget, false); }
   });
@@ -354,6 +382,11 @@ function openInviteDialog() {
     try {
       const values = Object.fromEntries(new FormData(event.currentTarget));
       const invitation = await api(`/v1/portal/organizations/${state.organization.id}/invitations`, { method: "POST", body: values });
+      if (!invitation.invitation_token) {
+        $("#form-dialog").close();
+        toast(`Invitation emailed to ${invitation.email}.`);
+        return;
+      }
       const invitationLink = `${window.location.origin}/portal/#invitation=${encodeURIComponent(invitation.invitation_token)}`;
       $("#dialog-title").textContent = "Invitation created";
       $("#dialog-body").innerHTML = `<p class="muted">Development link for ${escapeHtml(invitation.email)}. A production email adapter will deliver this automatically.</p><div class="secret-box">${escapeHtml(invitationLink)}</div><button id="copy-invite" class="button primary" type="button">Copy invitation link</button>`;
@@ -364,11 +397,26 @@ function openInviteDialog() {
 
 document.addEventListener("DOMContentLoaded", () => {
   bindEvents();
-  const invitationToken = new URLSearchParams(window.location.hash.slice(1)).get("invitation");
+  const action = new URLSearchParams(window.location.hash.slice(1));
+  const invitationToken = action.get("invitation");
+  const verificationToken = action.get("verify");
+  const resetToken = action.get("reset");
+  if (invitationToken || verificationToken || resetToken) {
+    window.history.replaceState({}, "", `${window.location.pathname}${window.location.search}`);
+  }
   if (invitationToken) {
     $("#invitation-form [name='token']").value = invitationToken;
-    window.history.replaceState({}, "", `${window.location.pathname}${window.location.search}`);
     showAuthPanel("invitation");
+    return;
+  }
+  if (verificationToken) {
+    $("#verify-form [name='token']").value = verificationToken;
+    showAuthPanel("verify");
+    return;
+  }
+  if (resetToken) {
+    showAuthPanel("login");
+    openPasswordResetConfirm(resetToken);
     return;
   }
   loadAccount().catch((error) => toast(error.message, true));

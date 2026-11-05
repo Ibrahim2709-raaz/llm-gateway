@@ -41,6 +41,7 @@
             <label>Password<input name="password" type="password" autocomplete="current-password" minlength="12" required></label>
             <button class="button primary" type="submit">Sign in</button>
             <button class="text-button" type="button" id="show-reset">Forgot password?</button>
+            <button class="text-button" type="button" id="show-resend">Resend verification email</button>
           </form>
 
           <form id="register-form" class="auth-form hidden" data-auth-panel="register">
@@ -79,6 +80,17 @@
             </div>
             <label>Email<input name="email" type="email" autocomplete="email" required></label>
             <button class="button primary" type="submit">Request reset</button>
+            <button class="text-button" type="button" data-return-login>Return to sign in</button>
+          </form>
+
+          <form id="resend-verification-form" class="auth-form hidden" data-auth-panel="resend">
+            <div>
+              <p class="eyebrow blue">EMAIL VERIFICATION</p>
+              <h2>Request another verification link</h2>
+              <p class="muted">The response is always the same, whether the account needs verification or not.</p>
+            </div>
+            <label>Email<input name="email" type="email" autocomplete="email" required></label>
+            <button class="button primary" type="submit">Send verification email</button>
             <button class="text-button" type="button" data-return-login>Return to sign in</button>
           </form>
 

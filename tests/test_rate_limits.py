@@ -12,6 +12,7 @@ from app.auth.dependencies import AuthenticatedClient
 from app.core.config import Settings
 from app.core.errors import GatewayError
 from app.rate_limits.dependencies import enforce_request_rate_limit
+from app.rate_limits.portal import enforce_portal_email_rate_limit
 from app.rate_limits.service import (
     RateLimitBackendError,
     RateLimitStatus,
@@ -97,6 +98,15 @@ def make_request() -> Request:
     return cast(Request, SimpleNamespace(app=application))
 
 
+def make_portal_request(source: str = "203.0.113.8") -> Request:
+    resources = SimpleNamespace(redis=object())
+    application = SimpleNamespace(state=SimpleNamespace(resources=resources))
+    return cast(
+        Request,
+        SimpleNamespace(app=application, client=SimpleNamespace(host=source)),
+    )
+
+
 def make_client() -> AuthenticatedClient:
     return AuthenticatedClient(client_id=uuid4(), api_key_id=uuid4(), name="Example")
 
@@ -164,3 +174,53 @@ async def test_rate_limit_dependency_returns_allowed_status(
     )
 
     assert result is allowed
+
+
+@pytest.mark.anyio
+async def test_portal_email_rate_limit_hashes_source_and_rejects_exhaustion(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    exhausted = RateLimitStatus(
+        limit=5,
+        remaining=0,
+        reset_after_seconds=300,
+        reset_at=1300,
+        allowed=False,
+    )
+    identifiers: list[str] = []
+
+    async def consume_identifier(_self: object, identifier: str) -> RateLimitStatus:
+        identifiers.append(identifier)
+        return exhausted
+
+    monkeypatch.setattr(RedisRateLimiter, "consume_identifier", consume_identifier)
+
+    with pytest.raises(GatewayError) as error:
+        await enforce_portal_email_rate_limit(
+            make_portal_request(),
+            Settings(_env_file=None),
+        )
+
+    assert error.value.status_code == 429
+    assert error.value.headers == exhausted.headers(include_retry_after=True)
+    assert identifiers[0].startswith("portal_email:")
+    assert "203.0.113.8" not in identifiers[0]
+
+
+@pytest.mark.anyio
+async def test_portal_email_rate_limit_fails_closed_without_redis(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    async def consume_identifier(*_: object) -> RateLimitStatus:
+        raise RateLimitBackendError
+
+    monkeypatch.setattr(RedisRateLimiter, "consume_identifier", consume_identifier)
+
+    with pytest.raises(GatewayError) as error:
+        await enforce_portal_email_rate_limit(
+            make_portal_request(),
+            Settings(_env_file=None),
+        )
+
+    assert error.value.status_code == 503
+    assert error.value.code == "rate_limit_unavailable"

@@ -17,6 +17,7 @@ from app.identity.dependencies import (
     authenticate_portal_session,
     require_portal_csrf,
 )
+from app.identity.email_delivery import EmailDeliveryError, get_portal_email_delivery
 from app.identity.members import (
     InvitationError,
     MembershipConflictError,
@@ -137,12 +138,29 @@ async def create_invitation(
             code="invalid_invitation",
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
         ) from exc
+    if settings.portal_action_token_delivery == "smtp":
+        delivery = get_portal_email_delivery(settings)
+        try:
+            await delivery.send_organization_invitation(
+                recipient=issued.invitation.email_normalized,
+                organization_name=identity.organization.name,
+                token=issued.value,
+            )
+        except EmailDeliveryError as exc:
+            raise GatewayError(
+                "The invitation was created, but the email could not be sent. "
+                "Create another invitation to retry.",
+                code="email_delivery_failed",
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            ) from exc
     return InvitationResponse(
         id=issued.invitation.id,
         email=issued.invitation.email_normalized,
         role=issued.invitation.role,
         expires_at=issued.invitation.expires_at.isoformat(),
-        invitation_token=issued.value,
+        invitation_token=(
+            issued.value if settings.portal_action_token_delivery == "response" else None
+        ),
     )
 
 

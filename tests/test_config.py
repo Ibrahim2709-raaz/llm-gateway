@@ -24,6 +24,8 @@ def test_dependency_timeout_must_be_positive() -> None:
     [
         ("request_rate_limit", 0),
         ("request_rate_limit_window_seconds", 0),
+        ("portal_email_rate_limit", 0),
+        ("portal_email_rate_limit_window_seconds", 0),
         ("response_cache_ttl_seconds", 0),
         ("provider_circuit_breaker_failure_threshold", 0),
         ("provider_circuit_breaker_recovery_seconds", 0),
@@ -170,4 +172,74 @@ def test_production_forbids_returning_action_tokens_in_api_responses() -> None:
             gateway_api_key_pepper="a-long-production-secret",
             trusted_hosts="api.example.com",
             portal_action_token_delivery="response",
+        )
+
+
+def test_smtp_delivery_requires_server_and_sender() -> None:
+    with pytest.raises(ValidationError, match="SMTP_HOST"):
+        Settings(_env_file=None, portal_action_token_delivery="smtp")
+    with pytest.raises(ValidationError, match="SMTP_FROM_EMAIL"):
+        Settings(
+            _env_file=None,
+            portal_action_token_delivery="smtp",
+            smtp_host="smtp.example.com",
+        )
+
+
+def test_smtp_credentials_must_be_configured_together() -> None:
+    with pytest.raises(ValidationError, match="configured together"):
+        Settings(
+            _env_file=None,
+            portal_action_token_delivery="smtp",
+            smtp_host="smtp.example.com",
+            smtp_from_email="gateway@example.com",
+            smtp_username="gateway",
+        )
+
+
+def test_smtp_sender_rejects_header_injection() -> None:
+    with pytest.raises(ValidationError, match="line breaks"):
+        Settings(
+            _env_file=None,
+            portal_action_token_delivery="smtp",
+            smtp_host="smtp.example.com",
+            smtp_from_email="gateway@example.com\r\nBcc: attacker@example.com",
+        )
+
+
+def test_production_smtp_requires_public_https_url() -> None:
+    common = {
+        "_env_file": None,
+        "app_env": "production",
+        "gateway_api_key_pepper": "a-long-production-secret",
+        "trusted_hosts": "api.example.com",
+        "portal_action_token_delivery": "smtp",
+        "smtp_host": "smtp.example.com",
+        "smtp_from_email": "gateway@example.com",
+    }
+    with pytest.raises(ValidationError, match="must use HTTPS"):
+        Settings(**common, portal_public_base_url="http://gateway.example.com")
+
+    settings = Settings(
+        **common,
+        portal_public_base_url="https://gateway.example.com",
+        smtp_username="gateway",
+        smtp_password="smtp-secret",
+    )
+    assert settings.smtp_password is not None
+    assert "smtp-secret" not in repr(settings)
+
+
+def test_production_smtp_requires_encrypted_transport() -> None:
+    with pytest.raises(ValidationError, match="SMTP_SECURITY=none"):
+        Settings(
+            _env_file=None,
+            app_env="production",
+            gateway_api_key_pepper="a-long-production-secret",
+            trusted_hosts="api.example.com",
+            portal_action_token_delivery="smtp",
+            portal_public_base_url="https://gateway.example.com",
+            smtp_host="smtp.example.com",
+            smtp_from_email="gateway@example.com",
+            smtp_security="none",
         )

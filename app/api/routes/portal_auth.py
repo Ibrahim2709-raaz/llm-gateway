@@ -2,6 +2,7 @@ from datetime import timedelta
 from typing import Annotated
 from uuid import UUID
 
+import structlog
 from fastapi import APIRouter, Depends, Response, status
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -16,6 +17,7 @@ from app.identity.accounts import (
     authenticate_account,
     list_active_memberships,
     register_organization_owner,
+    request_email_verification,
     request_password_reset,
     reset_account_password,
     verify_account_email,
@@ -26,12 +28,14 @@ from app.identity.dependencies import (
     authenticate_portal_session,
     require_portal_csrf,
 )
+from app.identity.email_delivery import EmailDeliveryError, get_portal_email_delivery
 from app.identity.passwords import ScryptPasswordHasher, get_password_hasher
 from app.identity.sessions import (
     ActionTokenError,
     issue_browser_session,
     revoke_browser_session,
 )
+from app.rate_limits.portal import enforce_portal_email_rate_limit
 from app.schemas.portal_auth import (
     BrowserSessionResponse,
     CurrentAccountResponse,
@@ -43,10 +47,13 @@ from app.schemas.portal_auth import (
     PasswordResetRequestResponse,
     RegisterAccountRequest,
     RegisterAccountResponse,
+    ResendVerificationRequest,
+    ResendVerificationResponse,
     VerifyEmailRequest,
 )
 
 router = APIRouter(prefix="/v1/portal/auth", tags=["Portal authentication"])
+logger = structlog.get_logger(__name__)
 
 
 @router.post(
@@ -54,6 +61,7 @@ router = APIRouter(prefix="/v1/portal/auth", tags=["Portal authentication"])
     response_model=RegisterAccountResponse,
     status_code=status.HTTP_201_CREATED,
     operation_id="registerPortalAccount",
+    dependencies=[Depends(enforce_portal_email_rate_limit)],
 )
 async def register_account(
     payload: RegisterAccountRequest,
@@ -100,10 +108,28 @@ async def register_account(
             code="invalid_account_details",
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
         ) from exc
+    if settings.portal_action_token_delivery == "smtp":
+        delivery = get_portal_email_delivery(settings)
+        try:
+            await delivery.send_email_verification(
+                recipient=registered.user.email_normalized,
+                token=registered.verification.value,
+            )
+        except EmailDeliveryError as exc:
+            raise GatewayError(
+                "The account was created, but the verification email could not be sent. "
+                "Request another verification email to continue.",
+                code="email_delivery_failed",
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            ) from exc
     return RegisterAccountResponse(
         user_id=registered.user.id,
         organization_id=registered.organization.id,
-        verification_token=registered.verification.value,
+        verification_token=(
+            registered.verification.value
+            if settings.portal_action_token_delivery == "response"
+            else None
+        ),
     )
 
 
@@ -132,9 +158,62 @@ async def verify_email(
 
 
 @router.post(
+    "/verify-email/resend",
+    response_model=ResendVerificationResponse,
+    operation_id="resendPortalEmailVerification",
+    dependencies=[Depends(enforce_portal_email_rate_limit)],
+)
+async def resend_email_verification(
+    payload: ResendVerificationRequest,
+    database: Annotated[AsyncSession, Depends(get_database_session)],
+    settings: Annotated[Settings, Depends(get_settings)],
+) -> ResendVerificationResponse:
+    if settings.portal_action_token_delivery == "disabled":
+        raise GatewayError(
+            "Email verification is unavailable until email delivery is configured.",
+            code="email_delivery_unavailable",
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+        )
+    try:
+        requested = await request_email_verification(
+            database,
+            email=payload.email,
+            verification_ttl=timedelta(seconds=settings.email_verification_ttl_seconds),
+        )
+        await database.commit()
+    except ValueError as exc:
+        await database.rollback()
+        raise GatewayError(
+            "Account details are invalid.",
+            code="invalid_account_details",
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+        ) from exc
+
+    if settings.portal_action_token_delivery == "smtp" and requested.delivery is not None:
+        delivery = get_portal_email_delivery(settings)
+        try:
+            await delivery.send_email_verification(
+                recipient=payload.email.strip().casefold(),
+                token=requested.delivery.value,
+            )
+        except EmailDeliveryError:
+            logger.warning("portal_email_delivery_failed", action="email_verification")
+    return ResendVerificationResponse(
+        message="If the account needs verification, instructions have been sent.",
+        verification_token=(
+            requested.delivery.value
+            if requested.delivery is not None
+            and settings.portal_action_token_delivery == "response"
+            else None
+        ),
+    )
+
+
+@router.post(
     "/password-reset/request",
     response_model=PasswordResetRequestResponse,
     operation_id="requestPortalPasswordReset",
+    dependencies=[Depends(enforce_portal_email_rate_limit)],
 )
 async def password_reset_request(
     payload: PasswordResetRequestBody,
@@ -161,9 +240,23 @@ async def password_reset_request(
             code="invalid_account_details",
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
         ) from exc
+    if settings.portal_action_token_delivery == "smtp" and requested.delivery is not None:
+        delivery = get_portal_email_delivery(settings)
+        try:
+            await delivery.send_password_reset(
+                recipient=payload.email.strip().casefold(),
+                token=requested.delivery.value,
+            )
+        except EmailDeliveryError:
+            logger.warning("portal_email_delivery_failed", action="password_reset")
     return PasswordResetRequestResponse(
         message="If the account exists, password reset instructions are available.",
-        reset_token=requested.delivery.value if requested.delivery is not None else None,
+        reset_token=(
+            requested.delivery.value
+            if requested.delivery is not None
+            and settings.portal_action_token_delivery == "response"
+            else None
+        ),
     )
 
 

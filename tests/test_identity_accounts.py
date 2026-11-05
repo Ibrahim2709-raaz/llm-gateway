@@ -11,6 +11,7 @@ from app.identity.accounts import (
     authenticate_account,
     normalize_organization_slug,
     register_organization_owner,
+    request_email_verification,
     request_password_reset,
     reset_account_password,
     verify_account_email,
@@ -175,6 +176,55 @@ async def test_verify_account_email_consumes_token_and_marks_user() -> None:
     )
     assert verified.email_verified_at == NOW + timedelta(minutes=1)
     assert token.consumed_at == NOW + timedelta(minutes=1)
+
+
+@pytest.mark.anyio
+async def test_verification_resend_rotates_token_for_unverified_user() -> None:
+    user = User(
+        id=uuid4(),
+        email_normalized="owner@example.com",
+        display_name="Owner",
+        status="active",
+    )
+    database = MagicMock()
+    database.scalar = AsyncMock(return_value=user)
+    database.execute = AsyncMock()
+    database.flush = AsyncMock()
+
+    requested = await request_email_verification(
+        database,
+        email=" OWNER@example.com ",
+        verification_ttl=timedelta(hours=1),
+        now=NOW,
+    )
+
+    assert requested.delivery is not None
+    assert requested.delivery.value.startswith("email_verification_")
+    database.execute.assert_awaited_once()
+    database.add.assert_called_once()
+
+
+@pytest.mark.anyio
+async def test_verification_resend_is_generic_for_verified_user() -> None:
+    user = User(
+        id=uuid4(),
+        email_normalized="owner@example.com",
+        display_name="Owner",
+        status="active",
+        email_verified_at=NOW,
+    )
+    database = MagicMock()
+    database.scalar = AsyncMock(return_value=user)
+
+    requested = await request_email_verification(
+        database,
+        email="owner@example.com",
+        verification_ttl=timedelta(hours=1),
+        now=NOW,
+    )
+
+    assert requested.delivery is None
+    database.add.assert_not_called()
 
 
 @pytest.mark.anyio

@@ -59,6 +59,11 @@ class PasswordResetRequest:
     delivery: IssuedUserActionToken | None
 
 
+@dataclass(frozen=True, slots=True)
+class EmailVerificationRequest:
+    delivery: IssuedUserActionToken | None
+
+
 def normalize_organization_slug(value: str) -> str:
     normalized = value.strip().casefold()
     if not ORGANIZATION_SLUG_PATTERN.fullmatch(normalized):
@@ -183,6 +188,27 @@ async def verify_account_email(
         user.email_verified_at = current_time
         await database.flush()
     return user
+
+
+async def request_email_verification(
+    database: AsyncSession,
+    *,
+    email: str,
+    verification_ttl: timedelta,
+    now: datetime | None = None,
+) -> EmailVerificationRequest:
+    normalized_email = normalize_email(email)
+    user = await database.scalar(select(User).where(User.email_normalized == normalized_email))
+    if user is None or user.status != "active" or user.email_verified_at is not None:
+        return EmailVerificationRequest(delivery=None)
+    delivery = await issue_user_action_token(
+        database,
+        user=user,
+        purpose="email_verification",
+        ttl=verification_ttl,
+        now=now,
+    )
+    return EmailVerificationRequest(delivery=delivery)
 
 
 async def authenticate_account(

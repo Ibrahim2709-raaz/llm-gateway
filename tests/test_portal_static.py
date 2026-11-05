@@ -13,6 +13,7 @@ def test_portal_shell_and_assets_are_served_by_gateway() -> None:
     assert "One governed path to every model" in page.text
     assert 'id="routing-decisions"' in page.text
     assert 'id="invitation-form"' in page.text
+    assert 'id="resend-verification-form"' in page.text
     assert page.headers["x-frame-options"] == "DENY"
     assert styles.status_code == 200
     assert "--canvas: #f7f2e8" in styles.text
@@ -20,6 +21,9 @@ def test_portal_shell_and_assets_are_served_by_gateway() -> None:
     assert 'sessionStorage.getItem("llm_gateway_csrf")' in script.text
     assert 'window.location.hash.slice(1)' in script.text
     assert '/v1/portal/invitations/accept-new' in script.text
+    assert '/v1/portal/auth/verify-email/resend' in script.text
+    assert 'action.get("verify")' in script.text
+    assert 'action.get("reset")' in script.text
 
 
 def test_portal_has_no_remote_runtime_dependencies() -> None:

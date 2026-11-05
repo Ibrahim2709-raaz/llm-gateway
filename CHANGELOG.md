@@ -6,6 +6,10 @@ All notable changes to this project are documented in this file.
 
 ### Added
 
+- Production SMTP delivery for portal verification, password-reset, and
+  organization-invitation links, including a non-enumerating verification
+  resend flow, direct portal link handling, and separate Redis-backed abuse
+  limits for public email-producing routes.
 - Versioned task taxonomy, classifier metadata, evaluation datasets, resumable
   evaluation runs, and deterministic scoring.
 - Audited activation and rollback for routing policies and model capability

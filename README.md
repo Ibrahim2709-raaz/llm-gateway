@@ -243,9 +243,20 @@ below the application layer.
 
 For local development, `PORTAL_ACTION_TOKEN_DELIVERY=response` returns the
 one-time email verification token from registration so the flow can be tested
-without an email vendor. Production refuses to start in that mode. Set it to
-`disabled` in production until a real email-delivery adapter is configured;
-registration then fails closed instead of exposing or losing a token.
+without an email vendor. Production refuses to start in that mode. For real
+delivery, set `PORTAL_ACTION_TOKEN_DELIVERY=smtp`, configure `SMTP_HOST`,
+`SMTP_FROM_EMAIL`, optional paired `SMTP_USERNAME` and `SMTP_PASSWORD`, and set
+`PORTAL_PUBLIC_BASE_URL` to the public HTTPS gateway origin. `SMTP_SECURITY`
+accepts `starttls`, `tls`, or `none`; the default is `starttls` on port 587.
+Verification, password-reset, and organization-invitation messages then contain
+single-use portal links while API responses omit their raw tokens. Production
+requires HTTPS links, rejects incomplete SMTP credentials and unsafe sender
+headers, and can still use `disabled` to fail all token-producing flows closed.
+Users can request another verification message without revealing whether an
+account exists or still needs verification. Public registration, verification
+resend, and password-reset requests share a separate per-source Redis limit of
+five requests per 15 minutes by default; configure it with
+`PORTAL_EMAIL_RATE_LIMIT` and `PORTAL_EMAIL_RATE_LIMIT_WINDOW_SECONDS`.
 
 Each authenticated customer is allowed 60 requests per 60-second window by
 default. Configure this with `REQUEST_RATE_LIMIT` and
