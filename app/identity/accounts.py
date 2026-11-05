@@ -68,7 +68,7 @@ def normalize_organization_slug(value: str) -> str:
     return normalized
 
 
-def _normalize_display_name(value: str) -> str:
+def normalize_display_name(value: str) -> str:
     normalized = " ".join(value.split())
     if not 1 <= len(normalized) <= 200:
         raise ValueError("Display name must contain 1 to 200 characters")
@@ -95,7 +95,7 @@ async def register_organization_owner(
     now: datetime | None = None,
 ) -> RegisteredAccount:
     normalized_email = normalize_email(email)
-    normalized_display_name = _normalize_display_name(display_name)
+    normalized_display_name = normalize_display_name(display_name)
     normalized_organization_name = _normalize_organization_name(organization_name)
     normalized_slug = normalize_organization_slug(organization_slug)
     hasher = password_hasher or ScryptPasswordHasher()

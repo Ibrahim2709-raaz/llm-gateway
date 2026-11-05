@@ -4,11 +4,13 @@ from uuid import uuid4
 
 import pytest
 
-from app.db.models import OrganizationInvitation, OrganizationMembership, User
+from app.db.models import Organization, OrganizationInvitation, OrganizationMembership, User
+from app.identity.accounts import AccountConflictError
 from app.identity.authorization import AuthorizationError, Principal
 from app.identity.members import (
     InvitationError,
     MembershipConflictError,
+    accept_invitation_for_new_user,
     accept_organization_invitation,
     issue_organization_invitation,
     update_organization_member,
@@ -141,6 +143,84 @@ async def test_accept_invitation_creates_active_membership() -> None:
     assert membership.status == "active"
     assert invitation.accepted_at == NOW
     assert database.add.call_count == 2  # membership plus audit event
+
+
+@pytest.mark.anyio
+async def test_new_user_accepts_invitation_with_verified_account() -> None:
+    organization = Organization(
+        id=uuid4(),
+        client_id=uuid4(),
+        slug="example-team",
+        name="Example Team",
+        status="active",
+    )
+    invitation = OrganizationInvitation(
+        id=uuid4(),
+        organization_id=organization.id,
+        email_normalized="new.member@example.com",
+        role="developer",
+        token_prefix="organization_invitation",
+        token_hash=hash_opaque_token("raw-token"),
+        expires_at=NOW + timedelta(days=1),
+    )
+    database = MagicMock()
+    database.scalar = AsyncMock(side_effect=[invitation, organization, None])
+    database.flush = AsyncMock()
+    hasher = MagicMock()
+    hasher.hash.return_value = "encoded-password"
+
+    accepted = await accept_invitation_for_new_user(
+        database,
+        value="raw-token",
+        display_name="  New   Member  ",
+        password="a sufficiently long password",
+        password_hasher=hasher,
+        now=NOW,
+    )
+
+    assert accepted.user.email_normalized == "new.member@example.com"
+    assert accepted.user.display_name == "New Member"
+    assert accepted.user.email_verified_at == NOW
+    assert accepted.user.password_hash == "encoded-password"
+    assert accepted.membership.organization_id == organization.id
+    assert accepted.membership.user_id == accepted.user.id
+    assert accepted.membership.role == "developer"
+    assert invitation.accepted_at == NOW
+    assert database.add.call_count == 3  # user, membership, and audit event
+
+
+@pytest.mark.anyio
+async def test_new_user_invitation_cannot_replace_existing_account() -> None:
+    organization = Organization(
+        id=uuid4(),
+        client_id=uuid4(),
+        slug="example-team",
+        name="Example Team",
+        status="active",
+    )
+    invitation = OrganizationInvitation(
+        id=uuid4(),
+        organization_id=organization.id,
+        email_normalized="member@example.com",
+        role="developer",
+        token_prefix="organization_invitation",
+        token_hash=hash_opaque_token("raw-token"),
+        expires_at=NOW + timedelta(days=1),
+    )
+    database = MagicMock()
+    database.scalar = AsyncMock(side_effect=[invitation, organization, uuid4()])
+
+    with pytest.raises(AccountConflictError, match="already uses"):
+        await accept_invitation_for_new_user(
+            database,
+            value="raw-token",
+            display_name="Member",
+            password="a sufficiently long password",
+            now=NOW,
+        )
+
+    assert invitation.accepted_at is None
+    database.add.assert_not_called()
 
 
 @pytest.mark.anyio

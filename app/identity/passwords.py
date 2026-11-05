@@ -13,6 +13,12 @@ class PasswordHashError(ValueError):
     pass
 
 
+def get_password_hasher() -> "ScryptPasswordHasher":
+    """Return the password hasher used by portal request dependencies."""
+
+    return ScryptPasswordHasher()
+
+
 def _encode(value: bytes) -> str:
     return base64.urlsafe_b64encode(value).rstrip(b"=").decode("ascii")
 

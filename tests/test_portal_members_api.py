@@ -3,18 +3,27 @@ from unittest.mock import AsyncMock, MagicMock
 from uuid import uuid4
 
 import pytest
+from fastapi import Response
 from fastapi.testclient import TestClient
 
-from app.api.routes.portal_members import create_invitation, list_members
+from app.api.routes.portal_members import (
+    accept_new_user_invitation,
+    create_invitation,
+    list_members,
+)
 from app.core.config import Settings
 from app.core.errors import GatewayError
 from app.db.models import BrowserSession, Organization, OrganizationMembership, User
 from app.identity.authorization import Principal
 from app.identity.dependencies import BrowserIdentity
-from app.identity.members import IssuedOrganizationInvitation, OrganizationMember
-from app.identity.sessions import AuthenticatedBrowserSession
+from app.identity.members import (
+    AcceptedNewUserInvitation,
+    IssuedOrganizationInvitation,
+    OrganizationMember,
+)
+from app.identity.sessions import AuthenticatedBrowserSession, IssuedBrowserSession
 from app.main import create_app
-from app.schemas.portal_members import CreateInvitationRequest
+from app.schemas.portal_members import AcceptNewUserInvitationRequest, CreateInvitationRequest
 
 NOW = datetime(2026, 10, 29, 12, tzinfo=UTC)
 
@@ -70,6 +79,7 @@ def test_member_routes_are_in_openapi_contract() -> None:
     assert "/v1/portal/organizations/{organization_id}/members" in paths
     assert "/v1/portal/organizations/{organization_id}/invitations" in paths
     assert "/v1/portal/invitations/accept" in paths
+    assert "/v1/portal/invitations/accept-new" in paths
 
 
 @pytest.mark.anyio
@@ -133,3 +143,53 @@ async def test_create_invitation_fails_closed_without_delivery() -> None:
             ),
         )
     assert error.value.status_code == 503
+
+
+@pytest.mark.anyio
+async def test_new_user_invitation_creates_portal_session(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    identity = browser_identity(role="developer")
+    accepted = AcceptedNewUserInvitation(
+        user=identity.authentication.user,
+        organization=identity.organization,
+        membership=identity.membership,
+    )
+    stored_session = identity.authentication.session
+    issued = IssuedBrowserSession(
+        session=stored_session,
+        session_token="portal-session-secret",
+        csrf_token="csrf-secret",
+    )
+    accept_service = AsyncMock(return_value=accepted)
+    issue_session = AsyncMock(return_value=issued)
+    monkeypatch.setattr(
+        "app.api.routes.portal_members.accept_invitation_for_new_user",
+        accept_service,
+    )
+    monkeypatch.setattr(
+        "app.api.routes.portal_members.issue_browser_session",
+        issue_session,
+    )
+    database = MagicMock()
+    database.commit = AsyncMock()
+    database.rollback = AsyncMock()
+    response = Response()
+
+    payload = await accept_new_user_invitation(
+        AcceptNewUserInvitationRequest(
+            token="organization_invitation_secret",
+            display_name="New Member",
+            password="a sufficiently long password",
+        ),
+        response,
+        database,
+        Settings(_env_file=None, app_env="test"),
+        MagicMock(),
+    )
+
+    assert payload.active_organization.id == identity.organization.id
+    assert payload.csrf_token == "csrf-secret"
+    assert "llm_gateway_session=portal-session-secret" in response.headers["set-cookie"]
+    assert "HttpOnly" in response.headers["set-cookie"]
+    database.commit.assert_awaited_once()

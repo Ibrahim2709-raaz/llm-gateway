@@ -28,6 +28,11 @@ class AcceptInvitationRequest(MemberSchema):
     token: SecretStr = Field(min_length=16, max_length=1_024)
 
 
+class AcceptNewUserInvitationRequest(AcceptInvitationRequest):
+    display_name: str = Field(min_length=1, max_length=200)
+    password: SecretStr = Field(min_length=12, max_length=1_024)
+
+
 class AcceptedInvitationResponse(MemberSchema):
     organization_id: UUID
     membership_id: UUID

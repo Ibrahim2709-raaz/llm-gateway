@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime, timedelta
-from uuid import UUID
+from uuid import UUID, uuid4
 
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -13,8 +13,10 @@ from app.db.models import (
     OrganizationMembership,
     User,
 )
+from app.identity.accounts import AccountConflictError, normalize_display_name
 from app.identity.audit import append_audit_event
 from app.identity.authorization import MEMBERS_MANAGE, Principal, require_organization_permission
+from app.identity.passwords import ScryptPasswordHasher
 from app.identity.roles import ORGANIZATION_ROLES
 from app.identity.sessions import normalize_email, utc_now
 from app.identity.tokens import hash_opaque_token, issue_opaque_token
@@ -38,6 +40,13 @@ class IssuedOrganizationInvitation:
 class OrganizationMember:
     membership: OrganizationMembership
     user: User
+
+
+@dataclass(frozen=True, slots=True)
+class AcceptedNewUserInvitation:
+    user: User
+    organization: Organization
+    membership: OrganizationMembership
 
 
 async def issue_organization_invitation(
@@ -173,6 +182,87 @@ async def accept_organization_invitation(
         event_data={"role": invitation.role},
     )
     return membership
+
+
+async def accept_invitation_for_new_user(
+    database: AsyncSession,
+    *,
+    value: str,
+    display_name: str,
+    password: str,
+    password_hasher: ScryptPasswordHasher | None = None,
+    now: datetime | None = None,
+) -> AcceptedNewUserInvitation:
+    """Create a verified user from an invitation and consume it atomically."""
+
+    current_time = now or utc_now()
+    invitation = await database.scalar(
+        select(OrganizationInvitation)
+        .where(OrganizationInvitation.token_hash == hash_opaque_token(value))
+        .with_for_update()
+    )
+    if (
+        invitation is None
+        or invitation.accepted_at is not None
+        or invitation.revoked_at is not None
+        or invitation.expires_at <= current_time
+    ):
+        raise InvitationError("Invitation is invalid or expired")
+
+    organization = await database.scalar(
+        select(Organization).where(
+            Organization.id == invitation.organization_id,
+            Organization.status == "active",
+        )
+    )
+    if organization is None:
+        raise InvitationError("Invitation is invalid or expired")
+    existing_user_id = await database.scalar(
+        select(User.id).where(User.email_normalized == invitation.email_normalized)
+    )
+    if existing_user_id is not None:
+        raise AccountConflictError("An account already uses the invited email")
+
+    hasher = password_hasher or ScryptPasswordHasher()
+    user = User(
+        id=uuid4(),
+        email_normalized=invitation.email_normalized,
+        display_name=normalize_display_name(display_name),
+        password_hash=hasher.hash(password),
+        status="active",
+        email_verified_at=current_time,
+    )
+    database.add(user)
+    await database.flush()
+    membership = OrganizationMembership(
+        id=uuid4(),
+        organization_id=organization.id,
+        user_id=user.id,
+        role=invitation.role,
+        status="active",
+    )
+    database.add(membership)
+    invitation.accepted_at = current_time
+    await database.flush()
+    await append_audit_event(
+        database,
+        principal=Principal(
+            actor_type="user",
+            actor_id=user.id,
+            organization_id=organization.id,
+            organization_role=membership.role,
+        ),
+        action="organization.invitation_accepted",
+        resource_type="organization_membership",
+        organization_id=organization.id,
+        resource_id=str(membership.id),
+        event_data={"role": membership.role, "new_user": True},
+    )
+    return AcceptedNewUserInvitation(
+        user=user,
+        organization=organization,
+        membership=membership,
+    )
 
 
 async def list_organization_members(

@@ -245,6 +245,19 @@ function bindEvents() {
     finally { setBusy(event.currentTarget, false); }
   });
 
+  $("#invitation-form").addEventListener("submit", async (event) => {
+    event.preventDefault(); setBusy(event.currentTarget, true);
+    try {
+      const values = Object.fromEntries(new FormData(event.currentTarget));
+      const session = await api("/v1/portal/invitations/accept-new", { method: "POST", body: values });
+      state.csrf = session.csrf_token; sessionStorage.setItem("llm_gateway_csrf", state.csrf);
+      toast(`Welcome to ${session.active_organization.name}.`); await loadAccount();
+    } catch (error) {
+      toast(error.message, true);
+      if (error.code === "account_exists") showAuthPanel("login");
+    } finally { setBusy(event.currentTarget, false); }
+  });
+
   $("#verify-form").addEventListener("submit", async (event) => {
     event.preventDefault(); setBusy(event.currentTarget, true);
     try {
@@ -341,14 +354,22 @@ function openInviteDialog() {
     try {
       const values = Object.fromEntries(new FormData(event.currentTarget));
       const invitation = await api(`/v1/portal/organizations/${state.organization.id}/invitations`, { method: "POST", body: values });
+      const invitationLink = `${window.location.origin}/portal/#invitation=${encodeURIComponent(invitation.invitation_token)}`;
       $("#dialog-title").textContent = "Invitation created";
-      $("#dialog-body").innerHTML = `<p class="muted">Development token for ${escapeHtml(invitation.email)}. A production email adapter will deliver this automatically.</p><div class="secret-box">${escapeHtml(invitation.invitation_token)}</div><button id="copy-invite" class="button primary" type="button">Copy invitation</button>`;
-      $("#copy-invite").addEventListener("click", async () => { await navigator.clipboard.writeText(invitation.invitation_token); toast("Invitation copied."); });
+      $("#dialog-body").innerHTML = `<p class="muted">Development link for ${escapeHtml(invitation.email)}. A production email adapter will deliver this automatically.</p><div class="secret-box">${escapeHtml(invitationLink)}</div><button id="copy-invite" class="button primary" type="button">Copy invitation link</button>`;
+      $("#copy-invite").addEventListener("click", async () => { await navigator.clipboard.writeText(invitationLink); toast("Invitation link copied."); });
     } catch (error) { toast(error.message, true); setBusy(event.currentTarget, false); }
   });
 }
 
 document.addEventListener("DOMContentLoaded", () => {
   bindEvents();
+  const invitationToken = new URLSearchParams(window.location.hash.slice(1)).get("invitation");
+  if (invitationToken) {
+    $("#invitation-form [name='token']").value = invitationToken;
+    window.history.replaceState({}, "", `${window.location.pathname}${window.location.search}`);
+    showAuthPanel("invitation");
+    return;
+  }
   loadAccount().catch((error) => toast(error.message, true));
 });

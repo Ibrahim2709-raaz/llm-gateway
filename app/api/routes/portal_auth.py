@@ -6,12 +6,12 @@ from fastapi import APIRouter, Depends, Response, status
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.api.portal_sessions import browser_session_response, set_portal_session_cookie
 from app.core.config import Settings, get_settings
 from app.core.errors import GatewayError
 from app.db.session import get_database_session
 from app.identity.accounts import (
     AccountConflictError,
-    AccountLogin,
     InvalidCredentialsError,
     authenticate_account,
     list_active_memberships,
@@ -26,10 +26,9 @@ from app.identity.dependencies import (
     authenticate_portal_session,
     require_portal_csrf,
 )
-from app.identity.passwords import ScryptPasswordHasher
+from app.identity.passwords import ScryptPasswordHasher, get_password_hasher
 from app.identity.sessions import (
     ActionTokenError,
-    IssuedBrowserSession,
     issue_browser_session,
     revoke_browser_session,
 )
@@ -48,45 +47,6 @@ from app.schemas.portal_auth import (
 )
 
 router = APIRouter(prefix="/v1/portal/auth", tags=["Portal authentication"])
-
-
-def get_password_hasher() -> ScryptPasswordHasher:
-    return ScryptPasswordHasher()
-
-
-def _set_session_cookie(
-    response: Response, *, issued: IssuedBrowserSession, settings: Settings
-) -> None:
-    response.set_cookie(
-        key=PORTAL_SESSION_COOKIE,
-        value=issued.session_token,
-        max_age=settings.browser_session_ttl_seconds,
-        expires=issued.session.expires_at,
-        path="/v1/portal",
-        secure=settings.app_env == "production",
-        httponly=True,
-        samesite="lax",
-    )
-    response.headers["Cache-Control"] = "no-store"
-
-
-def _session_response(issued: IssuedBrowserSession, login: AccountLogin) -> BrowserSessionResponse:
-    user = login.user
-    organization = login.organization
-    membership = login.membership
-    return BrowserSessionResponse(
-        user_id=user.id,
-        email=user.email_normalized,
-        display_name=user.display_name,
-        active_organization=OrganizationSummary(
-            id=organization.id,
-            slug=organization.slug,
-            name=organization.name,
-            role=membership.role,
-        ),
-        csrf_token=issued.csrf_token,
-        expires_at=issued.session.expires_at.isoformat(),
-    )
 
 
 @router.post(
@@ -264,8 +224,13 @@ async def login(
             error_type="authentication_error",
             status_code=status.HTTP_401_UNAUTHORIZED,
         ) from exc
-    _set_session_cookie(response, issued=issued, settings=settings)
-    return _session_response(issued, account)
+    set_portal_session_cookie(response, issued=issued, settings=settings)
+    return browser_session_response(
+        issued,
+        user=account.user,
+        organization=account.organization,
+        membership=account.membership,
+    )
 
 
 @router.post("/logout", response_model=MessageResponse, operation_id="logoutPortalAccount")

@@ -2,13 +2,15 @@ from datetime import timedelta
 from typing import Annotated, NoReturn
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, Response, status
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.api.portal_sessions import browser_session_response, set_portal_session_cookie
 from app.core.config import Settings, get_settings
 from app.core.errors import GatewayError
 from app.db.session import get_database_session
+from app.identity.accounts import AccountConflictError
 from app.identity.authorization import AuthorizationError
 from app.identity.dependencies import (
     BrowserIdentity,
@@ -18,14 +20,19 @@ from app.identity.dependencies import (
 from app.identity.members import (
     InvitationError,
     MembershipConflictError,
+    accept_invitation_for_new_user,
     accept_organization_invitation,
     issue_organization_invitation,
     list_organization_members,
     update_organization_member,
 )
+from app.identity.passwords import ScryptPasswordHasher, get_password_hasher
+from app.identity.sessions import issue_browser_session
+from app.schemas.portal_auth import BrowserSessionResponse
 from app.schemas.portal_members import (
     AcceptedInvitationResponse,
     AcceptInvitationRequest,
+    AcceptNewUserInvitationRequest,
     CreateInvitationRequest,
     InvitationResponse,
     OrganizationMemberResponse,
@@ -174,6 +181,63 @@ async def accept_invitation(
         organization_id=membership.organization_id,
         membership_id=membership.id,
         role=membership.role,
+    )
+
+
+@router.post(
+    "/invitations/accept-new",
+    response_model=BrowserSessionResponse,
+    status_code=status.HTTP_201_CREATED,
+    operation_id="acceptPortalInvitationForNewUser",
+)
+async def accept_new_user_invitation(
+    payload: AcceptNewUserInvitationRequest,
+    response: Response,
+    database: Annotated[AsyncSession, Depends(get_database_session)],
+    settings: Annotated[Settings, Depends(get_settings)],
+    hasher: Annotated[ScryptPasswordHasher, Depends(get_password_hasher)],
+) -> BrowserSessionResponse:
+    try:
+        accepted = await accept_invitation_for_new_user(
+            database,
+            value=payload.token.get_secret_value(),
+            display_name=payload.display_name,
+            password=payload.password.get_secret_value(),
+            password_hasher=hasher,
+        )
+        issued = await issue_browser_session(
+            database,
+            user=accepted.user,
+            active_organization_id=accepted.organization.id,
+            ttl=timedelta(seconds=settings.browser_session_ttl_seconds),
+        )
+        await database.commit()
+    except InvitationError as exc:
+        await database.rollback()
+        raise GatewayError(
+            "The invitation is invalid or expired.",
+            code="invalid_invitation",
+        ) from exc
+    except AccountConflictError as exc:
+        await database.rollback()
+        raise GatewayError(
+            "An account already uses this email. Sign in to accept the invitation.",
+            code="account_exists",
+            status_code=status.HTTP_409_CONFLICT,
+        ) from exc
+    except (IntegrityError, ValueError) as exc:
+        await database.rollback()
+        raise GatewayError(
+            "The invitation could not be accepted.",
+            code="invalid_invitation_account",
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+        ) from exc
+    set_portal_session_cookie(response, issued=issued, settings=settings)
+    return browser_session_response(
+        issued,
+        user=accepted.user,
+        organization=accepted.organization,
+        membership=accepted.membership,
     )
 
 

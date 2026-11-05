@@ -206,7 +206,13 @@ database.
 Organization owners can also list members, issue role-scoped invitations, and
 change member roles or status through `/v1/portal/organizations/{id}`. The API
 blocks cross-organization access and uses database row locks to ensure that
-concurrent updates cannot remove the final active owner.
+concurrent updates cannot remove the final active owner. A person without an
+account can open the portal invitation link, choose a name and password, and
+join the invited organization directly. The invitation verifies the invited
+email, is consumed exactly once, and creates an HTTP-only browser session;
+an email that already belongs to an account must use the authenticated
+acceptance flow instead, preventing the public endpoint from replacing an
+existing account.
 
 Owners and developers can create, list, and revoke organization gateway keys
 through `/v1/portal/organizations/{id}/api-keys`. A new plaintext key is shown

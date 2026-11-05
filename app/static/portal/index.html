@@ -81,6 +81,19 @@
             <button class="button primary" type="submit">Request reset</button>
             <button class="text-button" type="button" data-return-login>Return to sign in</button>
           </form>
+
+          <form id="invitation-form" class="auth-form hidden" data-auth-panel="invitation">
+            <div>
+              <p class="eyebrow blue">TEAM INVITATION</p>
+              <h2>Join your workspace</h2>
+              <p class="muted">Create your account with the email address that received this invitation.</p>
+            </div>
+            <input name="token" type="hidden">
+            <label>Your name<input name="display_name" autocomplete="name" maxlength="200" required></label>
+            <label>Password<input name="password" type="password" autocomplete="new-password" minlength="12" required><small>At least 12 characters.</small></label>
+            <button class="button primary" type="submit">Accept invitation</button>
+            <button class="text-button" type="button" data-return-login>Already have an account? Sign in</button>
+          </form>
         </div>
       </section>
     </main>

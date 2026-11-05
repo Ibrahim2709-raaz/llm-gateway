@@ -28,6 +28,16 @@ separate Version 3 portal endpoints use an HTTP-only browser session cookie and
 a session-bound CSRF token for mutations. Health checks, registration, login,
 email verification, and Prometheus metrics do not require a gateway API key.
 
+An organization invitation is also a one-time bearer credential. New users
+submit it to `POST /v1/portal/invitations/accept-new` with a display name and
+password. The gateway locks and consumes the invitation, creates a verified
+account scoped to the invited organization and role, and returns a browser
+session. If that email already has an account, the public flow refuses to alter
+it; the user must sign in and use `POST /v1/portal/invitations/accept`, which
+requires both the session-bound CSRF token and an exact email match. Portal
+links place invitation secrets in the URL fragment so they are not sent in HTTP
+request targets or referrer headers.
+
 Create a client and its first key after applying database migrations:
 
 ```bash
