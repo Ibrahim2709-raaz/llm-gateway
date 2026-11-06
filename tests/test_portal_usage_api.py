@@ -86,15 +86,94 @@ async def test_billing_viewer_can_read_organization_usage(
     )
     operation = AsyncMock(return_value=summary)
     monkeypatch.setattr("app.api.routes.portal_usage.DatabaseUsageService.summary", operation)
+    database = MagicMock()
+    database.scalar = AsyncMock(return_value=80)
     response = await get_portal_usage_summary(
         identity.organization.id,
         "2026-10",
         identity,
-        MagicMock(),
+        database,
     )
     assert response.cost_usd == 0.75
     assert response.remaining_budget_usd == 9
     assert response.total_tokens == 125
+    assert response.budget_alert_threshold_percent == 80
+    assert response.budget_alert_state == "within_budget"
+    assert response.budget_utilization_percent == 7.5
+
+
+@pytest.mark.anyio
+async def test_portal_usage_surfaces_budget_threshold_alert(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    identity = browser_identity(role="billing_viewer")
+    summary = UsageSummary(
+        period="2026-10",
+        request_count=20,
+        prompt_tokens=1000,
+        completion_tokens=500,
+        cost_usd=Decimal("8.50"),
+        budget_usd=Decimal("10"),
+        budget_committed_usd=Decimal("8.50"),
+    )
+    monkeypatch.setattr(
+        "app.api.routes.portal_usage.DatabaseUsageService.summary",
+        AsyncMock(return_value=summary),
+    )
+    database = MagicMock()
+    database.scalar = AsyncMock(return_value=80)
+
+    response = await get_portal_usage_summary(
+        identity.organization.id,
+        "2026-10",
+        identity,
+        database,
+    )
+
+    assert response.budget_alert_state == "threshold_reached"
+    assert response.budget_utilization_percent == 85
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize(
+    ("budget", "cost", "threshold", "expected_state"),
+    [
+        (None, "0", None, "not_configured"),
+        ("10", "10", 80, "limit_reached"),
+    ],
+)
+async def test_portal_usage_budget_alert_boundary_states(
+    monkeypatch: pytest.MonkeyPatch,
+    budget: str | None,
+    cost: str,
+    threshold: int | None,
+    expected_state: str,
+) -> None:
+    identity = browser_identity(role="billing_viewer")
+    summary = UsageSummary(
+        period="2026-10",
+        request_count=0,
+        prompt_tokens=0,
+        completion_tokens=0,
+        cost_usd=Decimal(cost),
+        budget_usd=Decimal(budget) if budget is not None else None,
+        budget_committed_usd=Decimal(cost),
+    )
+    monkeypatch.setattr(
+        "app.api.routes.portal_usage.DatabaseUsageService.summary",
+        AsyncMock(return_value=summary),
+    )
+    database = MagicMock()
+    database.scalar = AsyncMock(return_value=threshold)
+
+    response = await get_portal_usage_summary(
+        identity.organization.id,
+        "2026-10",
+        identity,
+        database,
+    )
+
+    assert response.budget_alert_state == expected_state
 
 
 @pytest.mark.anyio

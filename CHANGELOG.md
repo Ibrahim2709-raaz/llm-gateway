@@ -6,6 +6,9 @@ All notable changes to this project are documented in this file.
 
 ### Added
 
+- Version 3 customer-portal MVP completion: owner-managed service accounts with
+  one-time workload credentials and cascading revocation, visible monthly
+  budget-threshold alerts, and atomic gateway API-key rotation.
 - A customer request playground for organization owners and developers, with a
   no-provider route and cost preview plus governed completions that reuse the
   production rate-limit, budget, cache, routing, fallback, usage, and
@@ -30,6 +33,8 @@ All notable changes to this project are documented in this file.
 
 ### Changed
 
+- Package and runtime version advanced to 0.3.0 for the completed Version 3
+  customer-portal MVP.
 - Package and OpenAPI version advanced to 0.2.0 for the intelligent-routing
   release candidate.
 - CI now validates Prometheus rules and enforces at least 90% test coverage for

@@ -64,6 +64,21 @@ and membership in the organization named by the path. Billing viewers receive
 `403`; cross-organization requests receive the same `404` used by other portal
 resources.
 
+Portal owners can create, list, and revoke service accounts at
+`/v1/portal/organizations/{organization_id}/service-accounts`. Creation returns
+one gateway credential once; the database stores only its HMAC digest and safe
+prefix. Revocation locks the account and revokes all attached credentials in
+the same transaction. Direct organization API keys support atomic rotation at
+`POST /v1/portal/organizations/{organization_id}/api-keys/{api_key_id}/rotate`.
+The response returns the replacement once and the previous key becomes invalid
+before the transaction commits.
+
+The portal usage response extends the gateway totals with
+`budget_alert_threshold_percent`, `budget_utilization_percent`, and
+`budget_alert_state`. Alert state is one of `not_configured`, `within_budget`,
+`threshold_reached`, or `limit_reached`; it is derived entirely from usage and
+budget metadata.
+
 Create a client and its first key after applying database migrations:
 
 ```bash

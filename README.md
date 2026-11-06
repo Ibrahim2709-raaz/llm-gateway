@@ -148,6 +148,22 @@ Live-canary requests bypass the response cache so a response produced under a
 different routing policy cannot cross a rollout boundary. A later cache version
 can restore caching by including the policy and score versions in its key.
 
+## Version 0.3: customer-portal MVP
+
+Version 0.3 turns the gateway into a self-service product for an organization.
+The responsive portal supports secure registration and recovery, organization
+roles and invitations, API-key creation and atomic rotation, workload service
+accounts, monthly usage and provider-cost visibility, budget alerts, routing
+preferences and explanations, a governed request playground, and immutable
+audit history. Browser sessions, API keys, and one-time action links have
+separate lifecycles, and every customer resource is tenant-scoped.
+
+This is the completed Version 3 minimum viable product. Administrator routing
+controls, streaming, SDKs, bring-your-own-provider keys, commercial billing,
+and production-scale deployment are documented post-MVP increments rather than
+launch claims. See the [Version 3 roadmap](docs/version-3-roadmap.md) for that
+boundary.
+
 ## Project documentation
 
 - [MVP scope and acceptance criteria](docs/mvp-scope.md)
@@ -217,12 +233,24 @@ existing account.
 Owners and developers can create, list, and revoke organization gateway keys
 through `/v1/portal/organizations/{id}/api-keys`. A new plaintext key is shown
 exactly once; subsequent responses expose only its safe prefix and metadata,
-and every creation or revocation produces an organization audit event.
+and every creation or revocation produces an organization audit event. Active
+keys can also be rotated atomically: the replacement is shown once and the old
+credential is revoked in the same transaction.
+
+Organization owners can create and revoke workload service accounts through
+`/v1/portal/organizations/{id}/service-accounts`. Each account receives a
+separate developer credential shown exactly once. The stored database state
+contains only its digest and safe prefix; revoking the account immediately
+revokes every attached credential. Service-account credentials cannot create a
+browser session or manage the organization.
 
 All organization roles can view monthly request, token, estimated provider-cost,
 budget, and remaining-allowance totals at
 `/v1/portal/organizations/{id}/usage`. Owners can update monthly budgets through
 the adjacent `/budgets/{period}` endpoint; changes are row-locked and audited.
+The portal turns the configured threshold into a visible warning and escalates
+it when the monthly allowance is exhausted, without inspecting or storing
+prompts.
 
 Every non-cached live routing plan now records a privacy-safe decision snapshot.
 Owners and developers can inspect recent classifications, selected providers and

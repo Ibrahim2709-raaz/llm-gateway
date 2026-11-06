@@ -16,7 +16,7 @@ from app.auth.api_keys import (
 from app.auth.dependencies import authenticate_api_key
 from app.core.config import Settings
 from app.core.errors import GatewayError
-from app.db.models import ApiKey, Client
+from app.db.models import ApiKey, Client, ServiceAccount
 from app.main import create_app
 
 
@@ -96,7 +96,7 @@ async def test_authenticate_api_key_returns_customer_identity() -> None:
     )
     session = AsyncMock(spec=AsyncSession)
     result = Mock()
-    result.one_or_none.return_value = (stored_client, stored_key)
+    result.one_or_none.return_value = (stored_client, stored_key, None)
     session.execute.return_value = result
 
     identity = await authenticate_api_key(
@@ -109,6 +109,39 @@ async def test_authenticate_api_key_returns_customer_identity() -> None:
     assert identity.api_key_id == api_key_id
     assert identity.name == "Example"
     session.execute.assert_awaited_once()
+
+
+@pytest.mark.anyio
+async def test_authenticate_api_key_returns_active_service_account_identity() -> None:
+    generated = generate_api_key("test-pepper")
+    client = Client(id=uuid4(), name="Example", status="active")
+    account = ServiceAccount(
+        id=uuid4(),
+        organization_id=uuid4(),
+        name="Worker",
+        role="developer",
+        status="active",
+    )
+    key = ApiKey(
+        id=uuid4(),
+        client_id=client.id,
+        service_account_id=account.id,
+        name="Worker credential",
+        key_prefix=generated.prefix,
+        key_hash=generated.digest,
+    )
+    session = AsyncMock(spec=AsyncSession)
+    result = Mock()
+    result.one_or_none.return_value = (client, key, account)
+    session.execute.return_value = result
+
+    identity = await authenticate_api_key(
+        credentials=HTTPAuthorizationCredentials(scheme="Bearer", credentials=generated.token),
+        session=session,
+        settings=Settings(_env_file=None, gateway_api_key_pepper="test-pepper"),
+    )
+
+    assert identity.service_account_id == account.id
 
 
 @pytest.mark.anyio

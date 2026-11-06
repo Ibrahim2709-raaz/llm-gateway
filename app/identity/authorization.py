@@ -14,6 +14,7 @@ ActorType = Literal["user", "service_account", "api_key", "system"]
 ORGANIZATION_READ = "organization.read"
 MEMBERS_MANAGE = "members.manage"
 API_KEYS_MANAGE = "api_keys.manage"
+SERVICE_ACCOUNTS_MANAGE = "service_accounts.manage"
 BUDGETS_READ = "budgets.read"
 BUDGETS_MANAGE = "budgets.manage"
 USAGE_READ = "usage.read"
@@ -27,6 +28,7 @@ OWNER_PERMISSIONS = frozenset(
         ORGANIZATION_READ,
         MEMBERS_MANAGE,
         API_KEYS_MANAGE,
+        SERVICE_ACCOUNTS_MANAGE,
         BUDGETS_READ,
         BUDGETS_MANAGE,
         USAGE_READ,

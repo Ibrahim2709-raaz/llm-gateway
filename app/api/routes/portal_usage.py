@@ -2,9 +2,11 @@ from typing import Annotated, NoReturn
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query, status
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.errors import GatewayError
+from app.db.models import BudgetLimit
 from app.db.session import get_database_session
 from app.identity.audit import append_audit_event
 from app.identity.authorization import (
@@ -18,8 +20,11 @@ from app.identity.dependencies import (
     authenticate_portal_session,
     require_portal_csrf,
 )
-from app.schemas.portal_usage import BudgetResponse, UpdateBudgetRequest
-from app.schemas.usage import UsageSummaryResponse
+from app.schemas.portal_usage import (
+    BudgetResponse,
+    PortalUsageSummaryResponse,
+    UpdateBudgetRequest,
+)
 from app.usage.service import DatabaseUsageService, set_budget_limit
 
 router = APIRouter(prefix="/v1/portal/organizations/{organization_id}", tags=["Portal usage"])
@@ -40,13 +45,17 @@ def _raise_authorization_error(error: AuthorizationError) -> NoReturn:
     ) from error
 
 
-@router.get("/usage", response_model=UsageSummaryResponse, operation_id="getPortalUsageSummary")
+@router.get(
+    "/usage",
+    response_model=PortalUsageSummaryResponse,
+    operation_id="getPortalUsageSummary",
+)
 async def get_portal_usage_summary(
     organization_id: UUID,
     period: Annotated[str, Query(pattern=r"^[1-9][0-9]{3}-(0[1-9]|1[0-2])$")],
     identity: Annotated[BrowserIdentity, Depends(authenticate_portal_session)],
     database: Annotated[AsyncSession, Depends(get_database_session)],
-) -> UsageSummaryResponse:
+) -> PortalUsageSummaryResponse:
     try:
         require_organization_permission(
             identity.principal,
@@ -56,7 +65,26 @@ async def get_portal_usage_summary(
     except AuthorizationError as exc:
         _raise_authorization_error(exc)
     summary = await DatabaseUsageService(database).summary(identity.organization.client_id, period)
-    return UsageSummaryResponse(
+    alert_threshold = await database.scalar(
+        select(BudgetLimit.alert_threshold_percent).where(
+            BudgetLimit.client_id == identity.organization.client_id,
+            BudgetLimit.period == period,
+        )
+    )
+    utilization = (
+        float(summary.cost_usd / summary.budget_usd * 100)
+        if summary.budget_usd is not None and summary.budget_usd > 0
+        else None
+    )
+    if utilization is None or alert_threshold is None:
+        alert_state = "not_configured"
+    elif utilization >= 100:
+        alert_state = "limit_reached"
+    elif utilization >= alert_threshold:
+        alert_state = "threshold_reached"
+    else:
+        alert_state = "within_budget"
+    return PortalUsageSummaryResponse(
         period=summary.period,
         request_count=summary.request_count,
         prompt_tokens=summary.prompt_tokens,
@@ -69,6 +97,9 @@ async def get_portal_usage_summary(
             if summary.remaining_budget_usd is not None
             else None
         ),
+        budget_alert_threshold_percent=alert_threshold,
+        budget_utilization_percent=utilization,
+        budget_alert_state=alert_state,
     )
 
 

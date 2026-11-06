@@ -18,6 +18,7 @@ from app.identity.portal_keys import (
     create_organization_api_key,
     list_organization_api_keys,
     revoke_organization_api_key,
+    rotate_organization_api_key,
 )
 from app.schemas.portal_keys import (
     ApiKeyListResponse,
@@ -25,6 +26,7 @@ from app.schemas.portal_keys import (
     ApiKeySummary,
     CreateApiKeyRequest,
     CreatedApiKeyResponse,
+    RotatedApiKeyResponse,
 )
 
 router = APIRouter(
@@ -149,3 +151,44 @@ async def revoke_api_key(
     if api_key.revoked_at is None:  # pragma: no cover - invariant guarded by service
         raise RuntimeError("Revoked API key has no revocation timestamp")
     return ApiKeyRevokedResponse(id=api_key.id, revoked_at=api_key.revoked_at)
+
+
+@router.post(
+    "/{api_key_id}/rotate",
+    response_model=RotatedApiKeyResponse,
+    operation_id="rotatePortalApiKey",
+)
+async def rotate_api_key(
+    organization_id: UUID,
+    api_key_id: UUID,
+    identity: Annotated[BrowserIdentity, Depends(require_portal_csrf)],
+    database: Annotated[AsyncSession, Depends(get_database_session)],
+    settings: Annotated[Settings, Depends(get_settings)],
+) -> RotatedApiKeyResponse:
+    try:
+        rotated = await rotate_organization_api_key(
+            database,
+            principal=identity.principal,
+            organization_id=organization_id,
+            api_key_id=api_key_id,
+            pepper=settings.gateway_api_key_pepper.get_secret_value(),
+        )
+        await database.commit()
+    except AuthorizationError as exc:
+        await database.rollback()
+        _raise_authorization_error(exc)
+    except PortalApiKeyError as exc:
+        await database.rollback()
+        raise GatewayError(
+            "The active API key is unavailable.",
+            code="api_key_unavailable",
+            status_code=status.HTTP_404_NOT_FOUND,
+        ) from exc
+    return RotatedApiKeyResponse(
+        revoked_api_key_id=rotated.revoked_api_key_id,
+        id=rotated.api_key.id,
+        name=rotated.api_key.name,
+        key_prefix=rotated.api_key.key_prefix,
+        token=rotated.token,
+        created_at=rotated.api_key.created_at,
+    )

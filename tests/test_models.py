@@ -153,6 +153,7 @@ def test_identity_secrets_are_stored_only_as_hashes() -> None:
     assert "token" not in invitation_columns
     assert "secret" not in service_account_columns
     assert "api_key" not in service_account_columns
+    assert "service_account_id" in set(ApiKey.__table__.columns.keys())
 
 
 def test_audit_events_are_append_only_and_prompt_free() -> None:

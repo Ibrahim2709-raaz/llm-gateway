@@ -5,13 +5,17 @@ from uuid import uuid4
 import pytest
 from fastapi.testclient import TestClient
 
-from app.api.routes.portal_keys import create_api_key, list_api_keys, revoke_api_key
+from app.api.routes.portal_keys import create_api_key, list_api_keys, revoke_api_key, rotate_api_key
 from app.core.config import Settings
 from app.core.errors import GatewayError
 from app.db.models import ApiKey, BrowserSession, Organization, OrganizationMembership, User
 from app.identity.authorization import AuthorizationError, Principal
 from app.identity.dependencies import BrowserIdentity
-from app.identity.portal_keys import CreatedOrganizationApiKey, PortalApiKeyError
+from app.identity.portal_keys import (
+    CreatedOrganizationApiKey,
+    PortalApiKeyError,
+    RotatedOrganizationApiKey,
+)
 from app.identity.sessions import AuthenticatedBrowserSession
 from app.main import create_app
 from app.schemas.portal_keys import CreateApiKeyRequest
@@ -81,8 +85,10 @@ def test_portal_api_key_routes_are_in_openapi_contract() -> None:
         paths = client.get("/openapi.json").json()["paths"]
     collection = "/v1/portal/organizations/{organization_id}/api-keys"
     item = "/v1/portal/organizations/{organization_id}/api-keys/{api_key_id}"
+    rotation = f"{item}/rotate"
     assert set(paths[collection]) >= {"get", "post"}
     assert "delete" in paths[item]
+    assert "post" in paths[rotation]
 
 
 @pytest.mark.anyio
@@ -154,6 +160,66 @@ async def test_revoke_api_key_returns_revocation_time(
     assert result.id == api_key.id
     assert result.revoked_at == NOW
     database.commit.assert_awaited_once()
+
+
+@pytest.mark.anyio
+async def test_rotate_api_key_serializes_replacement_secret(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    identity = browser_identity()
+    old_key = portal_api_key(identity, revoked=True)
+    replacement = portal_api_key(identity)
+    monkeypatch.setattr(
+        "app.api.routes.portal_keys.rotate_organization_api_key",
+        AsyncMock(
+            return_value=RotatedOrganizationApiKey(
+                old_key.id,
+                replacement,
+                "gw_live_replacement",
+            )
+        ),
+    )
+    database = MagicMock()
+    database.commit = AsyncMock()
+    database.rollback = AsyncMock()
+
+    result = await rotate_api_key(
+        identity.organization.id,
+        old_key.id,
+        identity,
+        database,
+        Settings(_env_file=None, app_env="test"),
+    )
+
+    assert result.revoked_api_key_id == old_key.id
+    assert result.token == "gw_live_replacement"
+    database.commit.assert_awaited_once()
+
+
+@pytest.mark.anyio
+async def test_rotate_api_key_maps_unavailable_key(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    identity = browser_identity()
+    monkeypatch.setattr(
+        "app.api.routes.portal_keys.rotate_organization_api_key",
+        AsyncMock(side_effect=PortalApiKeyError("missing")),
+    )
+    database = MagicMock()
+    database.commit = AsyncMock()
+    database.rollback = AsyncMock()
+
+    with pytest.raises(GatewayError) as error:
+        await rotate_api_key(
+            identity.organization.id,
+            uuid4(),
+            identity,
+            database,
+            Settings(_env_file=None, app_env="test"),
+        )
+
+    assert error.value.status_code == 404
+    database.rollback.assert_awaited_once()
 
 
 @pytest.mark.anyio

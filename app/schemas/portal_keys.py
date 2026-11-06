@@ -35,3 +35,12 @@ class ApiKeyListResponse(ApiKeySchema):
 class ApiKeyRevokedResponse(ApiKeySchema):
     id: UUID
     revoked_at: datetime
+
+
+class RotatedApiKeyResponse(ApiKeySchema):
+    revoked_api_key_id: UUID
+    id: UUID
+    name: str
+    key_prefix: str
+    token: str
+    created_at: datetime

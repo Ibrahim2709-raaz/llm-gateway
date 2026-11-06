@@ -11,6 +11,7 @@ from app.identity.portal_keys import (
     create_organization_api_key,
     list_organization_api_keys,
     revoke_organization_api_key,
+    rotate_organization_api_key,
 )
 
 NOW = datetime(2026, 10, 29, 12, tzinfo=UTC)
@@ -117,3 +118,41 @@ async def test_revoke_api_key_is_idempotent_and_audited_once() -> None:
     )
     assert key.revoked_at == NOW
     assert database.add.call_count == 1
+
+
+@pytest.mark.anyio
+async def test_rotate_api_key_revokes_old_key_and_returns_one_time_replacement() -> None:
+    organization = Organization(
+        id=uuid4(),
+        client_id=uuid4(),
+        slug="example-team",
+        name="Example Team",
+        status="active",
+    )
+    current = ApiKey(
+        id=uuid4(),
+        client_id=organization.client_id,
+        name="Production key",
+        key_prefix="gw_live_old_key",
+        key_hash="old-digest",
+    )
+    row = MagicMock()
+    row.one_or_none.return_value = (current, organization)
+    database = MagicMock()
+    database.execute = AsyncMock(return_value=row)
+    database.flush = AsyncMock()
+
+    rotated = await rotate_organization_api_key(
+        database,
+        principal=principal(organization.id),
+        organization_id=organization.id,
+        api_key_id=current.id,
+        pepper="test-pepper",
+        now=NOW,
+    )
+
+    assert current.revoked_at == NOW
+    assert rotated.api_key.name == current.name
+    assert rotated.api_key.key_hash == hash_api_key(rotated.token, "test-pepper")
+    assert rotated.api_key.service_account_id is None
+    assert database.add.call_count == 2  # replacement key and audit event

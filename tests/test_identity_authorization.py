@@ -8,6 +8,7 @@ from app.identity.authorization import (
     BUDGETS_READ,
     MEMBERS_MANAGE,
     PLATFORM_MANAGE,
+    SERVICE_ACCOUNTS_MANAGE,
     AuthorizationError,
     Principal,
     require_organization_permission,
@@ -29,7 +30,12 @@ def test_owner_can_manage_members_keys_and_budgets() -> None:
     organization_id = uuid4()
     owner = principal("owner", organization_id=organization_id)
 
-    for permission in (MEMBERS_MANAGE, API_KEYS_MANAGE, BUDGETS_MANAGE):
+    for permission in (
+        MEMBERS_MANAGE,
+        API_KEYS_MANAGE,
+        SERVICE_ACCOUNTS_MANAGE,
+        BUDGETS_MANAGE,
+    ):
         require_organization_permission(
             owner,
             organization_id=organization_id,

@@ -119,6 +119,7 @@
           <button class="nav-item" data-view="usage"><span aria-hidden="true">◫</span> Usage & cost</button>
           <button class="nav-item" data-view="routing"><span aria-hidden="true">◇</span> Intelligent routing</button>
           <button class="nav-item" data-view="keys"><span aria-hidden="true">⌁</span> API keys</button>
+          <button class="nav-item owner-only" data-view="service-accounts"><span aria-hidden="true">⚙</span> Service accounts</button>
           <button class="nav-item" data-view="team"><span aria-hidden="true">◎</span> Team</button>
           <button class="nav-item" data-view="audit"><span aria-hidden="true">≡</span> Audit history</button>
         </nav>
@@ -143,6 +144,7 @@
       <main id="main-content" class="content" tabindex="-1">
         <section class="page" data-page="overview">
           <div class="page-heading"><div><p class="eyebrow blue">WORKSPACE OVERVIEW</p><h1>Good to see you, <span id="welcome-name">there</span>.</h1><p class="muted">Here is how your gateway is performing this month.</p></div><span class="period-chip" id="period-chip"></span></div>
+          <div id="budget-alert" class="budget-alert hidden" role="status"><div><strong id="budget-alert-title">Budget alert</strong><p id="budget-alert-message"></p></div><button class="text-button" type="button" data-go-view="usage">Review usage →</button></div>
           <div class="metric-grid">
             <article class="metric-card"><p>Estimated provider cost</p><strong id="metric-cost">$0.00</strong><span class="metric-caption">Settled usage this month</span></article>
             <article class="metric-card"><p>Requests</p><strong id="metric-requests">0</strong><span class="metric-caption">Successful and cached</span></article>
@@ -209,6 +211,11 @@
         <section class="page hidden" data-page="keys">
           <div class="page-heading"><div><p class="eyebrow blue">API KEYS</p><h1>Connect applications securely.</h1><p class="muted">Secrets are shown once. The gateway stores only a safe prefix and digest.</p></div><button id="new-key-button" class="button primary" type="button">Create API key</button></div>
           <article class="card"><div class="table-wrap"><table><thead><tr><th>Name</th><th>Prefix</th><th>Created</th><th>Status</th><th><span class="sr-only">Actions</span></th></tr></thead><tbody id="keys-table"></tbody></table></div></article>
+        </section>
+
+        <section class="page hidden" data-page="service-accounts">
+          <div class="page-heading"><div><p class="eyebrow blue">SERVICE ACCOUNTS</p><h1>Give workloads their own identity.</h1><p class="muted">Each service account receives one customer-scoped gateway credential. Revoking the account immediately revokes its credential.</p></div><button id="new-service-account-button" class="button primary" type="button">Create service account</button></div>
+          <article class="card"><div class="table-wrap"><table><thead><tr><th>Name</th><th>Role</th><th>Credential prefix</th><th>Created</th><th>Status</th><th><span class="sr-only">Actions</span></th></tr></thead><tbody id="service-accounts-table"></tbody></table></div></article>
         </section>
 
         <section class="page hidden" data-page="team">

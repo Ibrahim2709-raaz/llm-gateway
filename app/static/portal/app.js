@@ -104,6 +104,7 @@ function applyRoleVisibility() {
   $$(".developer-only").forEach((element) => element.classList.toggle("hidden", !canDevelop));
   $('[data-view="audit"]').classList.toggle("hidden", !isOwner);
   if (!isOwner && $('[data-page="audit"]:not(.hidden)')) showPage("overview");
+  if (!isOwner && $('[data-page="service-accounts"]:not(.hidden)')) showPage("overview");
   if (!canDevelop && $('[data-page="playground"]:not(.hidden)')) showPage("overview");
 }
 
@@ -148,10 +149,20 @@ function renderUsage(usage) {
   badge.className = "status-badge neutral";
   if (usage.budget_usd === null) badge.textContent = "Not configured";
   else if (percentage >= 100) { badge.textContent = "Limit reached"; badge.className = "status-badge danger"; }
-  else if (percentage >= 80) { badge.textContent = "Review spend"; badge.className = "status-badge warning"; }
+  else if (usage.budget_alert_state === "threshold_reached") { badge.textContent = "Review spend"; badge.className = "status-badge warning"; }
   else { badge.textContent = "Within budget"; badge.className = "status-badge success"; }
+  const alert = $("#budget-alert");
+  if (["threshold_reached", "limit_reached"].includes(usage.budget_alert_state)) {
+    alert.classList.remove("hidden", "danger");
+    if (usage.budget_alert_state === "limit_reached") alert.classList.add("danger");
+    $("#budget-alert-title").textContent = usage.budget_alert_state === "limit_reached" ? "Monthly budget reached" : "Budget alert threshold reached";
+    $("#budget-alert-message").textContent = `${Number(usage.budget_utilization_percent).toFixed(1)}% of this month's ${formatMoney(usage.budget_usd)} allowance has been used. Your alert threshold is ${usage.budget_alert_threshold_percent}%.`;
+  } else {
+    alert.classList.add("hidden");
+  }
   $("#usage-table").innerHTML = `<tr><td>${escapeHtml(usage.period)}</td><td>${formatNumber(usage.request_count)}</td><td>${formatNumber(usage.prompt_tokens)}</td><td>${formatNumber(usage.completion_tokens)}</td><td>${formatNumber(usage.total_tokens)}</td><td>${formatMoney(usage.cost_usd)}</td><td>${formatMoney(usage.remaining_budget_usd)}</td></tr>`;
   if (usage.budget_usd !== null) $("#budget-form [name='limit_usd']").value = usage.budget_usd;
+  if (usage.budget_alert_threshold_percent !== null) $("#budget-form [name='alert_threshold_percent']").value = usage.budget_alert_threshold_percent;
 }
 
 function renderPreference(strategy) {
@@ -173,6 +184,7 @@ async function loadPage(name) {
   if (["overview", "usage"].includes(name)) return loadOverview();
   if (name === "playground") return;
   if (name === "keys") return loadKeys();
+  if (name === "service-accounts") return loadServiceAccounts();
   if (name === "routing") return loadRouting();
   if (name === "team") return loadMembers();
   if (name === "audit") return loadAudit();
@@ -180,7 +192,13 @@ async function loadPage(name) {
 
 async function loadKeys() {
   const payload = await api(`/v1/portal/organizations/${state.organization.id}/api-keys`);
-  $("#keys-table").innerHTML = payload.data.length ? payload.data.map((key) => `<tr><td><strong>${escapeHtml(key.name)}</strong></td><td><code>${escapeHtml(key.key_prefix)}…</code></td><td>${formatDate(key.created_at)}</td><td><span class="status-badge ${key.revoked_at ? "neutral" : "success"}">${key.revoked_at ? "Revoked" : "Active"}</span></td><td>${key.revoked_at ? "" : `<button class="text-button revoke-key" data-key-id="${escapeHtml(key.id)}">Revoke</button>`}</td></tr>`).join("") : '<tr><td colspan="5" class="empty-state">No API keys yet.</td></tr>';
+  $("#keys-table").innerHTML = payload.data.length ? payload.data.map((key) => `<tr><td><strong>${escapeHtml(key.name)}</strong></td><td><code>${escapeHtml(key.key_prefix)}…</code></td><td>${formatDate(key.created_at)}</td><td><span class="status-badge ${key.revoked_at ? "neutral" : "success"}">${key.revoked_at ? "Revoked" : "Active"}</span></td><td>${key.revoked_at ? "" : `<button class="text-button rotate-key" data-key-id="${escapeHtml(key.id)}">Rotate</button> <button class="text-button revoke-key" data-key-id="${escapeHtml(key.id)}">Revoke</button>`}</td></tr>`).join("") : '<tr><td colspan="5" class="empty-state">No API keys yet.</td></tr>';
+}
+
+async function loadServiceAccounts() {
+  if (state.organization.role !== "owner") return;
+  const payload = await api(`/v1/portal/organizations/${state.organization.id}/service-accounts`);
+  $("#service-accounts-table").innerHTML = payload.data.length ? payload.data.map((account) => `<tr><td><strong>${escapeHtml(account.name)}</strong></td><td>${titleCase(account.role)}</td><td>${account.key_prefix ? `<code>${escapeHtml(account.key_prefix)}…</code>` : "—"}</td><td>${formatDate(account.created_at)}</td><td><span class="status-badge ${account.status === "active" ? "success" : "neutral"}">${titleCase(account.status)}</span></td><td>${account.status === "active" ? `<button class="text-button revoke-service-account" data-service-account-id="${escapeHtml(account.id)}">Revoke</button>` : ""}</td></tr>`).join("") : '<tr><td colspan="6" class="empty-state">No service accounts yet.</td></tr>';
 }
 
 async function loadRouting() {
@@ -433,12 +451,31 @@ function bindEvents() {
   });
 
   $("#new-key-button").addEventListener("click", openCreateKeyDialog);
+  $("#new-service-account-button").addEventListener("click", openCreateServiceAccountDialog);
   $("#invite-button").addEventListener("click", openInviteDialog);
   $("#keys-table").addEventListener("click", async (event) => {
+    const rotateButton = event.target.closest(".rotate-key");
+    if (rotateButton) {
+      if (!window.confirm("Rotate this API key? The current key will stop working immediately.")) return;
+      try {
+        const rotated = await api(`/v1/portal/organizations/${state.organization.id}/api-keys/${rotateButton.dataset.keyId}/rotate`, { method: "POST" });
+        showOneTimeSecret("Save the replacement key", rotated.token, "The previous key is revoked. Update the application before closing this dialog.");
+        await loadKeys();
+      } catch (error) { toast(error.message, true); }
+      return;
+    }
     const button = event.target.closest(".revoke-key"); if (!button) return;
     if (!window.confirm("Revoke this API key? Applications using it will stop working.")) return;
     try { await api(`/v1/portal/organizations/${state.organization.id}/api-keys/${button.dataset.keyId}`, { method: "DELETE" }); toast("API key revoked."); await loadKeys(); }
     catch (error) { toast(error.message, true); }
+  });
+  $("#service-accounts-table").addEventListener("click", async (event) => {
+    const button = event.target.closest(".revoke-service-account"); if (!button) return;
+    if (!window.confirm("Revoke this service account and its credential?")) return;
+    try {
+      await api(`/v1/portal/organizations/${state.organization.id}/service-accounts/${button.dataset.serviceAccountId}`, { method: "DELETE" });
+      toast("Service account revoked."); await loadServiceAccounts();
+    } catch (error) { toast(error.message, true); }
   });
 }
 
@@ -459,10 +496,28 @@ function openCreateKeyDialog() {
     try {
       const values = Object.fromEntries(new FormData(event.currentTarget));
       const created = await api(`/v1/portal/organizations/${state.organization.id}/api-keys`, { method: "POST", body: values });
-      $("#dialog-title").textContent = "Save this key now";
-      $("#dialog-body").innerHTML = `<p class="muted">You will not be able to see it again.</p><div class="secret-box" id="new-key-secret">${escapeHtml(created.token)}</div><button id="copy-key" class="button primary" type="button">Copy key</button>`;
-      $("#copy-key").addEventListener("click", async () => { await navigator.clipboard.writeText(created.token); toast("API key copied."); });
+      showOneTimeSecret("Save this key now", created.token, "You will not be able to see it again.");
       await loadKeys();
+    } catch (error) { toast(error.message, true); setBusy(event.currentTarget, false); }
+  });
+}
+
+function showOneTimeSecret(title, token, message) {
+  $("#dialog-title").textContent = title;
+  $("#dialog-body").innerHTML = `<p class="muted">${escapeHtml(message)}</p><div class="secret-box">${escapeHtml(token)}</div><button id="copy-secret" class="button primary" type="button">Copy credential</button>`;
+  $("#copy-secret").addEventListener("click", async () => { await navigator.clipboard.writeText(token); toast("Credential copied."); });
+  if (!$("#form-dialog").open) $("#form-dialog").showModal();
+}
+
+function openCreateServiceAccountDialog() {
+  openDialog({ eyebrow: "WORKLOAD IDENTITY", title: "Create a service account", content: '<form id="create-service-account-form"><label>Name<input name="name" maxlength="200" placeholder="Production worker" required></label><p class="muted">A developer credential will be shown once. It can call the gateway but cannot sign in to the portal.</p><button class="button primary" type="submit">Create service account</button></form>' });
+  $("#create-service-account-form").addEventListener("submit", async (event) => {
+    event.preventDefault(); setBusy(event.currentTarget, true);
+    try {
+      const values = Object.fromEntries(new FormData(event.currentTarget));
+      const created = await api(`/v1/portal/organizations/${state.organization.id}/service-accounts`, { method: "POST", body: values });
+      showOneTimeSecret("Save the service credential", created.token, "This credential is shown once. Store it in your application's secret manager.");
+      await loadServiceAccounts();
     } catch (error) { toast(error.message, true); setBusy(event.currentTarget, false); }
   });
 }

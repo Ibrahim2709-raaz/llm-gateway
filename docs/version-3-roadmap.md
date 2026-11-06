@@ -16,6 +16,22 @@ Prometheus or Grafana: those remain the infrastructure monitoring tools. The
 new web application provides customer and administrator workflows backed by
 tenant-safe product APIs.
 
+## MVP delivery status
+
+The Version 3 customer-portal MVP is implemented as of November 5, 2026.
+Organizations can onboard users, enforce roles and tenant boundaries, manage
+members, service accounts and credentials, rotate keys, set budgets and alerts,
+inspect usage and routing explanations, run governed test requests, and review
+immutable audit history without using an operator CLI.
+
+Two roadmap items remain intentionally outside the MVP. The responsive portal
+uses dependency-free HTML, CSS, and JavaScript served by FastAPI instead of a
+separate React deployment, reducing the launch attack surface and operational
+footprint. Server-sent streaming remains in Milestone 4 because cancellation
+and exact usage settlement require a gateway-wide protocol change; the MVP
+playground follows the current non-streaming API contract. Milestones 3 through
+7 remain post-MVP product increments.
+
 ## Product principles
 
 1. **Self-service without weaker controls.** Common customer actions move to a

@@ -59,6 +59,9 @@ class ApiKey(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     client_id: Mapped[UUID] = mapped_column(
         ForeignKey("clients.id", ondelete="CASCADE"), nullable=False, index=True
     )
+    service_account_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("service_accounts.id", ondelete="CASCADE"), index=True
+    )
     name: Mapped[str] = mapped_column(String(200), nullable=False)
     key_prefix: Mapped[str] = mapped_column(String(24), nullable=False, index=True)
     key_hash: Mapped[str] = mapped_column(String(128), nullable=False, unique=True)
