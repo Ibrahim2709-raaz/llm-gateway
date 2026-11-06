@@ -11,6 +11,7 @@ from app.db.session import get_database_session
 from app.observability.metrics import METRICS
 from app.rate_limits.dependencies import enforce_request_rate_limit
 from app.rate_limits.service import RateLimitStatus
+from app.routing.preferences import DatabaseRoutingPreferenceResolver
 from app.routing.repository import DatabaseRoutingEvidenceRepository
 from app.routing.rollout import IntelligentRoutingRollout
 from app.schemas.chat import ChatCompletionRequest, ChatCompletionResponse
@@ -54,14 +55,10 @@ def get_chat_service(
         intelligent_routing_required_score_version=(
             settings.intelligent_routing_required_score_version
         ),
-        evidence_repository=(
-            DatabaseRoutingEvidenceRepository(session)
-            if (
-                settings.intelligent_routing_enabled
-                or settings.intelligent_routing_shadow_enabled
-            )
-            else None
-        ),
+        # The repository also stores privacy-safe decision snapshots for the
+        # customer portal, even when intelligent routing is disabled.
+        evidence_repository=DatabaseRoutingEvidenceRepository(session),
+        routing_preference_resolver=DatabaseRoutingPreferenceResolver(session),
     )
 
 

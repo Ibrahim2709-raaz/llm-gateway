@@ -23,8 +23,61 @@ Authorization: Bearer gw_live_<43-character-secret>
 ```
 
 Provider credentials are configured on the gateway and are never supplied by
-clients. Every endpoint except health checks and Prometheus metrics requires a
-gateway API key.
+clients. Gateway traffic and usage endpoints require a gateway API key. The
+separate Version 3 portal endpoints use an HTTP-only browser session cookie and
+a session-bound CSRF token for mutations. Health checks, registration, login,
+email verification, and Prometheus metrics do not require a gateway API key.
+
+An organization invitation is also a one-time bearer credential. New users
+submit it to `POST /v1/portal/invitations/accept-new` with a display name and
+password. The gateway locks and consumes the invitation, creates a verified
+account scoped to the invited organization and role, and returns a browser
+session. If that email already has an account, the public flow refuses to alter
+it; the user must sign in and use `POST /v1/portal/invitations/accept`, which
+requires both the session-bound CSRF token and an exact email match. Portal
+links place invitation secrets in the URL fragment so they are not sent in HTTP
+request targets or referrer headers.
+
+Email verification and password-reset links follow the same fragment-based
+pattern. With `PORTAL_ACTION_TOKEN_DELIVERY=smtp`, the gateway commits the
+one-time token before contacting the SMTP server, never returns that token in
+the API response, and lets the portal consume `#verify=...`, `#reset=...`, or
+`#invitation=...`. A failed registration or invitation delivery is reported as
+`503 email_delivery_failed`; the committed registration can recover through
+the generic verification-resend endpoint, while an owner can safely replace a
+failed invitation. Password-reset and verification-resend responses stay
+generic even when delivery fails so they cannot be used to enumerate accounts.
+Registration, verification resend, and password-reset request routes also use a
+separate per-source Redis rate limit and fail closed when a safe limit decision
+cannot be made.
+
+Authenticated organization owners and developers can use the portal playground
+without placing a gateway API key in browser storage. `POST
+/v1/portal/organizations/{organization_id}/playground/preview` computes the
+route and maximum estimated provider cost without calling a provider, consuming
+the request rate limit, reserving budget, or recording a shadow decision. `POST
+/v1/portal/organizations/{organization_id}/playground/completions` delegates to
+the normal chat service and therefore applies the organization's rate limit,
+budget, cache, routing preference, retries, fallbacks, usage accounting, and
+observability. Both routes require the HTTP-only portal session, its CSRF token,
+and membership in the organization named by the path. Billing viewers receive
+`403`; cross-organization requests receive the same `404` used by other portal
+resources.
+
+Portal owners can create, list, and revoke service accounts at
+`/v1/portal/organizations/{organization_id}/service-accounts`. Creation returns
+one gateway credential once; the database stores only its HMAC digest and safe
+prefix. Revocation locks the account and revokes all attached credentials in
+the same transaction. Direct organization API keys support atomic rotation at
+`POST /v1/portal/organizations/{organization_id}/api-keys/{api_key_id}/rotate`.
+The response returns the replacement once and the previous key becomes invalid
+before the transaction commits.
+
+The portal usage response extends the gateway totals with
+`budget_alert_threshold_percent`, `budget_utilization_percent`, and
+`budget_alert_state`. Alert state is one of `not_configured`, `within_budget`,
+`threshold_reached`, or `limit_reached`; it is derived entirely from usage and
+budget metadata.
 
 Create a client and its first key after applying database migrations:
 

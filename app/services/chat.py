@@ -1,5 +1,6 @@
 import time
 from collections.abc import Callable
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from uuid import UUID, uuid4
 
@@ -18,6 +19,7 @@ from app.observability.metrics import MetricsRecorder
 from app.providers.base import ChatProvider, ProviderRequestError
 from app.routing.classifier import classify_request
 from app.routing.intelligent import EvidenceDrivenRouter
+from app.routing.preferences import DatabaseRoutingPreferenceResolver
 from app.routing.repository import (
     DatabaseRoutingEvidenceRepository,
     RoutingEvidenceError,
@@ -36,6 +38,12 @@ from app.schemas.chat import (
 from app.usage.service import UsageTracker
 
 logger = structlog.get_logger(__name__)
+
+
+@dataclass(frozen=True, slots=True)
+class ChatPlanPreview:
+    request: ChatCompletionRequest
+    plan: RoutingPlan
 
 
 class ChatCompletionService:
@@ -57,6 +65,7 @@ class ChatCompletionService:
         intelligent_routing_required_policy_version: str | None = None,
         intelligent_routing_required_score_version: str | None = None,
         evidence_repository: DatabaseRoutingEvidenceRepository | None = None,
+        routing_preference_resolver: DatabaseRoutingPreferenceResolver | None = None,
         clock: Callable[[], float] = time.perf_counter,
     ) -> None:
         self.providers = providers
@@ -69,6 +78,7 @@ class ChatCompletionService:
         )
         self.intelligent_routing_required_score_version = intelligent_routing_required_score_version
         self.evidence_repository = evidence_repository
+        self.routing_preference_resolver = routing_preference_resolver
         if intelligent_routing_enabled and intelligent_routing_shadow_enabled:
             raise ValueError("Live and shadow intelligent routing cannot both be enabled")
         self.executor = ProviderExecutor(
@@ -90,6 +100,8 @@ class ChatCompletionService:
         request_id: UUID,
         client_id: UUID,
     ) -> ChatCompletionResponse:
+        if self.routing_preference_resolver is not None:
+            request = await self.routing_preference_resolver.apply(client_id, request)
         live_routing_selected = self._live_routing_selected(client_id)
         if (
             self.response_cache is not None
@@ -119,6 +131,13 @@ class ChatCompletionService:
             self._record_cache_request("bypass")
 
         routing_plan = await self._plan(request, client_id)
+        if self.evidence_repository is not None:
+            await self.evidence_repository.record_decision(
+                request_id=request_id,
+                client_id=client_id,
+                plan=routing_plan,
+                created_at=datetime.now(UTC),
+            )
         if self.usage_tracker is not None:
             try:
                 await self.usage_tracker.reserve(
@@ -263,10 +282,29 @@ class ChatCompletionService:
             await self.response_cache.set(client_id, request, response)
         return response
 
-    async def _plan(self, request: ChatCompletionRequest, client_id: UUID) -> RoutingPlan:
+    async def preview(
+        self,
+        request: ChatCompletionRequest,
+        client_id: UUID,
+    ) -> ChatPlanPreview:
+        """Plan a request without calling a provider or reserving customer budget."""
+
+        if self.routing_preference_resolver is not None:
+            request = await self.routing_preference_resolver.apply(client_id, request)
+        plan = await self._plan(request, client_id, record_shadow=False)
+        return ChatPlanPreview(request=request, plan=plan)
+
+    async def _plan(
+        self,
+        request: ChatCompletionRequest,
+        client_id: UUID,
+        *,
+        record_shadow: bool = True,
+    ) -> RoutingPlan:
         if self.intelligent_routing_shadow_enabled:
             baseline = self.router.plan(request)
-            await self._record_shadow_decision(request, baseline)
+            if record_shadow:
+                await self._record_shadow_decision(request, baseline)
             return baseline
         if not self._live_routing_selected(client_id):
             return self.router.plan(request)

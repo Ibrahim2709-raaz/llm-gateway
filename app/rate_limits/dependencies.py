@@ -1,4 +1,5 @@
 from typing import Annotated
+from uuid import UUID
 
 import structlog
 from fastapi import Depends, Request, status
@@ -12,10 +13,11 @@ from app.rate_limits.service import RateLimitBackendError, RateLimitStatus, Redi
 logger = structlog.get_logger(__name__)
 
 
-async def enforce_request_rate_limit(
+async def consume_client_rate_limit(
     request: Request,
-    client: Annotated[AuthenticatedClient, Depends(authenticate_api_key)],
-    settings: Annotated[Settings, Depends(get_settings)],
+    *,
+    client_id: UUID,
+    settings: Settings,
 ) -> RateLimitStatus:
     limiter = RedisRateLimiter(
         request.app.state.resources.redis,
@@ -23,10 +25,10 @@ async def enforce_request_rate_limit(
         window_seconds=settings.request_rate_limit_window_seconds,
     )
     try:
-        rate_limit = await limiter.consume(client.client_id)
+        rate_limit = await limiter.consume(client_id)
     except RateLimitBackendError as error:
         METRICS.record_rate_limit("backend_error")
-        logger.exception("rate_limit_backend_unavailable", client_id=str(client.client_id))
+        logger.exception("rate_limit_backend_unavailable", client_id=str(client_id))
         raise GatewayError(
             "The request rate limiter is temporarily unavailable.",
             code="rate_limit_unavailable",
@@ -45,3 +47,15 @@ async def enforce_request_rate_limit(
         )
     METRICS.record_rate_limit("allowed")
     return rate_limit
+
+
+async def enforce_request_rate_limit(
+    request: Request,
+    client: Annotated[AuthenticatedClient, Depends(authenticate_api_key)],
+    settings: Annotated[Settings, Depends(get_settings)],
+) -> RateLimitStatus:
+    return await consume_client_rate_limit(
+        request,
+        client_id=client.client_id,
+        settings=settings,
+    )

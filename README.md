@@ -148,6 +148,22 @@ Live-canary requests bypass the response cache so a response produced under a
 different routing policy cannot cross a rollout boundary. A later cache version
 can restore caching by including the policy and score versions in its key.
 
+## Version 0.3: customer-portal MVP
+
+Version 0.3 turns the gateway into a self-service product for an organization.
+The responsive portal supports secure registration and recovery, organization
+roles and invitations, API-key creation and atomic rotation, workload service
+accounts, monthly usage and provider-cost visibility, budget alerts, routing
+preferences and explanations, a governed request playground, and immutable
+audit history. Browser sessions, API keys, and one-time action links have
+separate lifecycles, and every customer resource is tenant-scoped.
+
+This is the completed Version 3 minimum viable product. Administrator routing
+controls, streaming, SDKs, bring-your-own-provider keys, commercial billing,
+and production-scale deployment are documented post-MVP increments rather than
+launch claims. See the [Version 3 roadmap](docs/version-3-roadmap.md) for that
+boundary.
+
 ## Project documentation
 
 - [MVP scope and acceptance criteria](docs/mvp-scope.md)
@@ -157,6 +173,8 @@ can restore caching by including the policy and score versions in its key.
 - [Production deployment and rollback guide](docs/deployment.md)
 - [Intelligent model routing roadmap](docs/intelligent-routing-roadmap.md)
 - [Intelligent routing operations and rollback](docs/intelligent-routing-operations.md)
+- [Version 3 product platform roadmap](docs/version-3-roadmap.md)
+- [Version 3 portal design system](docs/portal-design-system.md)
 
 ## Run locally
 
@@ -172,6 +190,7 @@ uvicorn app.main:app --reload
 Open:
 
 - API documentation: <http://localhost:8000/docs>
+- Customer portal: <http://localhost:8000/portal/>
 - Liveness: <http://localhost:8000/health/live>
 - Readiness: <http://localhost:8000/health/ready>
 - Prometheus metrics: <http://localhost:8000/metrics>
@@ -192,6 +211,92 @@ key and customer ID once; save the key securely because the gateway stores only
 a visible prefix and an HMAC-SHA256 digest. Set `GATEWAY_API_KEY_PEPPER` to a
 stable secret in every environment, and never change it without rotating all
 API keys. The development default is rejected when `APP_ENV=production`.
+
+Version 3 also exposes the first portal authentication API under
+`/v1/portal/auth`: organization-owner registration, email verification, login,
+logout, current-account inspection, and active-organization switching. Browser
+sessions use an HTTP-only cookie plus a session-bound `X-CSRF-Token` for every
+authenticated mutation. Raw session and action tokens are never stored in the
+database.
+
+Organization owners can also list members, issue role-scoped invitations, and
+change member roles or status through `/v1/portal/organizations/{id}`. The API
+blocks cross-organization access and uses database row locks to ensure that
+concurrent updates cannot remove the final active owner. A person without an
+account can open the portal invitation link, choose a name and password, and
+join the invited organization directly. The invitation verifies the invited
+email, is consumed exactly once, and creates an HTTP-only browser session;
+an email that already belongs to an account must use the authenticated
+acceptance flow instead, preventing the public endpoint from replacing an
+existing account.
+
+Owners and developers can create, list, and revoke organization gateway keys
+through `/v1/portal/organizations/{id}/api-keys`. A new plaintext key is shown
+exactly once; subsequent responses expose only its safe prefix and metadata,
+and every creation or revocation produces an organization audit event. Active
+keys can also be rotated atomically: the replacement is shown once and the old
+credential is revoked in the same transaction.
+
+Organization owners can create and revoke workload service accounts through
+`/v1/portal/organizations/{id}/service-accounts`. Each account receives a
+separate developer credential shown exactly once. The stored database state
+contains only its digest and safe prefix; revoking the account immediately
+revokes every attached credential. Service-account credentials cannot create a
+browser session or manage the organization.
+
+All organization roles can view monthly request, token, estimated provider-cost,
+budget, and remaining-allowance totals at
+`/v1/portal/organizations/{id}/usage`. Owners can update monthly budgets through
+the adjacent `/budgets/{period}` endpoint; changes are row-locked and audited.
+The portal turns the configured threshold into a visible warning and escalates
+it when the monthly allowance is exhausted, without inspecting or storing
+prompts.
+
+Every non-cached live routing plan now records a privacy-safe decision snapshot.
+Owners and developers can inspect recent classifications, selected providers and
+models, policy and score versions, candidate counts, and safe reason codes at
+`/v1/portal/organizations/{id}/routing/decisions`. Prompts and model responses
+are not stored in these snapshots.
+
+Owners and developers can set an organization default of `balanced`, `cost`,
+`latency`, or `quality` through the routing preference endpoint. The gateway
+applies that default only when a chat request omits `routing.strategy`; an
+explicit per-request strategy always takes precedence.
+
+The customer portal includes a governed request playground for owners and
+developers. Route preview shows the model, estimated maximum provider cost,
+task classification, evidence versions, and safe selection reasons without
+calling a provider or reserving budget. Running the request uses the same
+customer-isolated rate limit, budget reservation, cache, intelligent router,
+retry and fallback path, usage accounting, and observability as the public chat
+API. The browser authenticates with its HTTP-only portal session and never
+receives an organization gateway key. Results show actual token usage,
+estimated provider cost, cache status, route reasons, and provider attempts.
+The current playground deliberately supports non-streaming text completions,
+matching the gateway's current API contract.
+
+Organization owners can review the portal audit feed at
+`/v1/portal/organizations/{id}/audit-events`. Audit metadata is filtered by
+organization and rejects sensitive fields; PostgreSQL now also blocks every
+`UPDATE` or `DELETE` against the audit table so append-only history is enforced
+below the application layer.
+
+For local development, `PORTAL_ACTION_TOKEN_DELIVERY=response` returns the
+one-time email verification token from registration so the flow can be tested
+without an email vendor. Production refuses to start in that mode. For real
+delivery, set `PORTAL_ACTION_TOKEN_DELIVERY=smtp`, configure `SMTP_HOST`,
+`SMTP_FROM_EMAIL`, optional paired `SMTP_USERNAME` and `SMTP_PASSWORD`, and set
+`PORTAL_PUBLIC_BASE_URL` to the public HTTPS gateway origin. `SMTP_SECURITY`
+accepts `starttls`, `tls`, or `none`; the default is `starttls` on port 587.
+Verification, password-reset, and organization-invitation messages then contain
+single-use portal links while API responses omit their raw tokens. Production
+requires HTTPS links, rejects incomplete SMTP credentials and unsafe sender
+headers, and can still use `disabled` to fail all token-producing flows closed.
+Users can request another verification message without revealing whether an
+account exists or still needs verification. Public registration, verification
+resend, and password-reset requests share a separate per-source Redis limit of
+five requests per 15 minutes by default; configure it with
+`PORTAL_EMAIL_RATE_LIMIT` and `PORTAL_EMAIL_RATE_LIMIT_WINDOW_SECONDS`.
 
 Each authenticated customer is allowed 60 requests per 60-second window by
 default. Configure this with `REQUEST_RATE_LIMIT` and

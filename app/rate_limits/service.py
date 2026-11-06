@@ -60,7 +60,12 @@ class RedisRateLimiter:
         self.clock = clock
 
     async def consume(self, client_id: UUID) -> RateLimitStatus:
-        key = f"rate_limit:requests:{client_id}"
+        return await self.consume_identifier(f"requests:{client_id}")
+
+    async def consume_identifier(self, identifier: str) -> RateLimitStatus:
+        if not identifier or len(identifier) > 200:
+            raise ValueError("Rate-limit identifier must contain 1 to 200 characters")
+        key = f"rate_limit:{identifier}"
         window_milliseconds = self.window_seconds * 1000
         try:
             raw_result = await cast(

@@ -17,7 +17,7 @@ class Settings(BaseSettings):
     )
 
     app_name: str = "LLM Gateway"
-    app_version: str = "0.2.0"
+    app_version: str = "0.3.0"
     app_env: Literal["development", "test", "production"] = "development"
     log_level: str = Field(default="INFO", pattern="^(DEBUG|INFO|WARNING|ERROR|CRITICAL)$")
     host: str = "0.0.0.0"
@@ -29,6 +29,8 @@ class Settings(BaseSettings):
     dependency_check_timeout_seconds: float = Field(default=1.0, gt=0, le=10)
     request_rate_limit: int = Field(default=60, ge=1, le=1_000_000)
     request_rate_limit_window_seconds: int = Field(default=60, ge=1, le=86_400)
+    portal_email_rate_limit: int = Field(default=5, ge=1, le=1_000)
+    portal_email_rate_limit_window_seconds: int = Field(default=900, ge=60, le=86_400)
     response_cache_enabled: bool = True
     response_cache_ttl_seconds: int = Field(default=300, ge=1, le=86_400)
     intelligent_routing_enabled: bool = False
@@ -40,6 +42,21 @@ class Settings(BaseSettings):
     max_request_body_bytes: int = Field(default=1_048_576, ge=1_024, le=52_428_800)
     trusted_hosts: str = "*"
     gateway_api_key_pepper: SecretStr = SecretStr(DEFAULT_DEVELOPMENT_API_KEY_PEPPER)
+    browser_session_ttl_seconds: int = Field(default=604_800, ge=300, le=2_592_000)
+    browser_session_touch_interval_seconds: int = Field(default=300, ge=30, le=86_400)
+    email_verification_ttl_seconds: int = Field(default=86_400, ge=300, le=604_800)
+    password_reset_ttl_seconds: int = Field(default=3_600, ge=300, le=86_400)
+    organization_invitation_ttl_seconds: int = Field(default=604_800, ge=3_600, le=2_592_000)
+    portal_action_token_delivery: Literal["response", "smtp", "disabled"] = "response"
+    portal_public_base_url: AnyHttpUrl = AnyHttpUrl("http://localhost:8000")
+    smtp_host: str | None = None
+    smtp_port: int = Field(default=587, ge=1, le=65_535)
+    smtp_security: Literal["starttls", "tls", "none"] = "starttls"
+    smtp_username: str | None = None
+    smtp_password: SecretStr | None = None
+    smtp_from_email: str | None = None
+    smtp_from_name: str = Field(default="LLM Gateway", min_length=1, max_length=200)
+    smtp_timeout_seconds: float = Field(default=10.0, gt=0, le=120)
     openai_enabled: bool = False
     openai_api_key: SecretStr | None = None
     openai_model: str = Field(default="gpt-5.6-terra", min_length=1)
@@ -112,6 +129,50 @@ class Settings(BaseSettings):
             and self.gateway_api_key_pepper.get_secret_value() == DEFAULT_DEVELOPMENT_API_KEY_PEPPER
         ):
             raise ValueError("GATEWAY_API_KEY_PEPPER must be changed in production")
+        if self.app_env == "production" and self.portal_action_token_delivery == "response":
+            raise ValueError("PORTAL_ACTION_TOKEN_DELIVERY=response is forbidden in production")
+        if self.portal_action_token_delivery == "smtp":
+            if not self.smtp_host or not self.smtp_host.strip():
+                raise ValueError("SMTP_HOST is required when SMTP delivery is enabled")
+            if not self.smtp_from_email or not self.smtp_from_email.strip():
+                raise ValueError("SMTP_FROM_EMAIL is required when SMTP delivery is enabled")
+            username_configured = bool(self.smtp_username and self.smtp_username.strip())
+            password_configured = bool(
+                self.smtp_password and self.smtp_password.get_secret_value()
+            )
+            if username_configured != password_configured:
+                raise ValueError("SMTP_USERNAME and SMTP_PASSWORD must be configured together")
+            if not self.smtp_from_name.strip():
+                raise ValueError("SMTP_FROM_NAME must not be blank")
+            if any(
+                character in f"{self.smtp_from_name}{self.smtp_from_email}"
+                for character in "\r\n"
+            ):
+                raise ValueError("SMTP sender fields cannot contain line breaks")
+            assert self.smtp_from_email is not None
+            local_part, separator, domain = self.smtp_from_email.strip().partition("@")
+            if (
+                not separator
+                or not local_part
+                or not domain
+                or "@" in domain
+                or any(character.isspace() for character in self.smtp_from_email)
+            ):
+                raise ValueError("SMTP_FROM_EMAIL must be a valid email address")
+            if self.portal_public_base_url.query or self.portal_public_base_url.fragment:
+                raise ValueError("PORTAL_PUBLIC_BASE_URL cannot contain a query or fragment")
+        if (
+            self.app_env == "production"
+            and self.portal_action_token_delivery == "smtp"
+            and self.portal_public_base_url.scheme != "https"
+        ):
+            raise ValueError("PORTAL_PUBLIC_BASE_URL must use HTTPS in production")
+        if (
+            self.app_env == "production"
+            and self.portal_action_token_delivery == "smtp"
+            and self.smtp_security == "none"
+        ):
+            raise ValueError("SMTP_SECURITY=none is forbidden in production")
         if not self.trusted_host_list:
             raise ValueError("TRUSTED_HOSTS must contain at least one host")
         if self.app_env == "production" and "*" in self.trusted_host_list:
