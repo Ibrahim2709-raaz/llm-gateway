@@ -133,6 +133,10 @@ tbody tr:last-child td { border-bottom: 0; }
 .reason-list li { padding: .22rem .4rem; color: #0e7490; background: #ecfeff; border-radius: .3rem; font-size: .68rem; }
 .decision-meta { color: var(--muted); font-size: .72rem; text-align: right; }
 .empty-state { margin: 1rem 0; color: var(--muted); text-align: center; }
+.catalog-notice { padding: .9rem 1rem; margin-bottom: 1rem; color: #1e3a8a; background: var(--blue-soft); border: 1px solid #bfdbfe; border-radius: .75rem; }
+.catalog-notice p { margin: .25rem 0 0; color: #475569; font-size: .8rem; line-height: 1.5; }
+.catalog-chips { display: flex; flex-wrap: wrap; gap: .3rem; }
+.catalog-chip { padding: .22rem .4rem; color: #0e7490; background: #ecfeff; border-radius: .3rem; font-size: .68rem; font-weight: 650; }
 .audit-list { display: grid; }
 .audit-item { display: grid; grid-template-columns: 9rem 1fr auto; gap: 1rem; padding: .9rem 0; border-bottom: 1px solid #edf0f4; }
 .audit-item:last-child { border-bottom: 0; }

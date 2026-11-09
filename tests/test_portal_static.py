@@ -17,6 +17,8 @@ def test_portal_shell_and_assets_are_served_by_gateway() -> None:
     assert 'id="playground-form"' in page.text
     assert 'data-view="playground"' in page.text
     assert 'data-view="service-accounts"' in page.text
+    assert 'data-view="admin-models"' in page.text
+    assert 'id="model-catalog-table"' in page.text
     assert 'id="budget-alert"' in page.text
     assert page.headers["x-frame-options"] == "DENY"
     assert styles.status_code == 200
@@ -31,6 +33,8 @@ def test_portal_shell_and_assets_are_served_by_gateway() -> None:
     assert "/playground/preview" in script.text
     assert "/playground/completions" in script.text
     assert "/service-accounts" in script.text
+    assert "/v1/portal/admin/models" in script.text
+    assert 'platform_role === "platform_operator"' in script.text
     assert "/rotate" in script.text
     assert 'name="prompt"' not in script.text
 

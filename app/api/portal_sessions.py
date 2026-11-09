@@ -42,4 +42,5 @@ def browser_session_response(
         ),
         csrf_token=issued.csrf_token,
         expires_at=issued.session.expires_at.isoformat(),
+        platform_role=user.platform_role,
     )

@@ -96,6 +96,9 @@ semantic status colors.
 
 ## Milestone 3: Administrator routing control plane
 
+Status: in progress. The first checkpoint provides a platform-operator-only,
+read-only model catalog with explicit configuration and pricing provenance.
+
 ### Work
 
 - Add a model catalog with provider, model, price, context, capability, and

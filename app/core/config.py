@@ -60,6 +60,7 @@ class Settings(BaseSettings):
     openai_enabled: bool = False
     openai_api_key: SecretStr | None = None
     openai_model: str = Field(default="gpt-5.6-terra", min_length=1)
+    openai_context_window_tokens: int | None = Field(default=None, ge=1)
     openai_timeout_seconds: float = Field(default=30.0, gt=0, le=600)
     openai_input_cost_per_million_usd: float = Field(default=2.0, ge=0)
     openai_output_cost_per_million_usd: float = Field(default=12.0, ge=0)
@@ -68,6 +69,7 @@ class Settings(BaseSettings):
     anthropic_enabled: bool = False
     anthropic_api_key: SecretStr | None = None
     anthropic_model: str = Field(default="claude-sonnet-5-5", min_length=1)
+    anthropic_context_window_tokens: int | None = Field(default=None, ge=1)
     anthropic_timeout_seconds: float = Field(default=30.0, gt=0, le=600)
     anthropic_input_cost_per_million_usd: float = Field(default=2.0, ge=0)
     anthropic_output_cost_per_million_usd: float = Field(default=10.0, ge=0)
@@ -77,6 +79,7 @@ class Settings(BaseSettings):
     local_base_url: AnyHttpUrl = AnyHttpUrl("http://localhost:11434/v1")
     local_api_key: SecretStr = SecretStr("ollama")
     local_model: str = Field(default="qwen3:8b", min_length=1)
+    local_context_window_tokens: int | None = Field(default=None, ge=1)
     local_timeout_seconds: float = Field(default=60.0, gt=0, le=600)
     local_input_cost_per_million_usd: float = Field(default=0.0, ge=0)
     local_output_cost_per_million_usd: float = Field(default=0.0, ge=0)
@@ -196,6 +199,18 @@ class Settings(BaseSettings):
     def normalize_optional_routing_version(cls, value: object) -> object:
         if isinstance(value, str):
             return value.strip() or None
+        return value
+
+    @field_validator(
+        "openai_context_window_tokens",
+        "anthropic_context_window_tokens",
+        "local_context_window_tokens",
+        mode="before",
+    )
+    @classmethod
+    def normalize_optional_context_window(cls, value: object) -> object:
+        if isinstance(value, str) and not value.strip():
+            return None
         return value
 
     @property

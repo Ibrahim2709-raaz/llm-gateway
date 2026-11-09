@@ -118,6 +118,7 @@
           <button class="nav-item developer-only" data-view="playground"><span aria-hidden="true">▶</span> Playground</button>
           <button class="nav-item" data-view="usage"><span aria-hidden="true">◫</span> Usage & cost</button>
           <button class="nav-item" data-view="routing"><span aria-hidden="true">◇</span> Intelligent routing</button>
+          <button class="nav-item platform-only" data-view="admin-models"><span aria-hidden="true">▦</span> Model catalog</button>
           <button class="nav-item" data-view="keys"><span aria-hidden="true">⌁</span> API keys</button>
           <button class="nav-item owner-only" data-view="service-accounts"><span aria-hidden="true">⚙</span> Service accounts</button>
           <button class="nav-item" data-view="team"><span aria-hidden="true">◎</span> Team</button>
@@ -206,6 +207,12 @@
           <div class="page-heading"><div><p class="eyebrow blue">INTELLIGENT ROUTING</p><h1>Control the goal. Inspect the choice.</h1><p class="muted">Your default guides automatic routing; explicit request settings still win.</p></div></div>
           <article class="card preference-card"><div><p class="eyebrow">ORGANIZATION DEFAULT</p><h2>Routing preference</h2><p class="muted">Choose the outcome the gateway should optimize when callers leave it unspecified.</p></div><form id="routing-preference-form" class="strategy-options"><label><input type="radio" name="strategy" value="balanced"><span><strong>Balanced</strong><small>Quality, speed, cost, and reliability</small></span></label><label><input type="radio" name="strategy" value="cost"><span><strong>Lowest cost</strong><small>Prefer the cheapest eligible model</small></span></label><label><input type="radio" name="strategy" value="latency"><span><strong>Lowest latency</strong><small>Prefer the fastest eligible model</small></span></label><label><input type="radio" name="strategy" value="quality"><span><strong>Highest quality</strong><small>Prefer the best measured score</small></span></label><button class="button primary" type="submit">Save preference</button></form></article>
           <article class="card"><div class="card-heading"><div><p class="eyebrow">RECENT DECISIONS</p><h2>Why each model was selected</h2></div><span class="privacy-note">Prompts are not stored</span></div><div id="routing-decisions" class="decision-list"><p class="empty-state">No routing decisions yet.</p></div></article>
+        </section>
+
+        <section class="page hidden platform-only" data-page="admin-models">
+          <div class="page-heading"><div><p class="eyebrow blue">PLATFORM ADMINISTRATION</p><h1>Model catalog</h1><p class="muted">Inspect the models the gateway can route to and the configured estimates used for cost, latency, and quality decisions.</p></div><span class="privacy-note">Provider credentials are never exposed</span></div>
+          <div class="catalog-notice"><strong>Configuration provenance</strong><p>Values come from the gateway environment. Prices are routing estimates, not a provider invoice; context windows remain undeclared until explicitly configured.</p></div>
+          <article class="card"><div class="table-wrap"><table><thead><tr><th>Provider / model</th><th>Availability</th><th>Input / 1M</th><th>Output / 1M</th><th>Context</th><th>Capabilities</th><th>Latency estimate</th><th>Quality</th><th>Routing</th></tr></thead><tbody id="model-catalog-table"><tr><td colspan="9" class="empty-state">Loading model catalog…</td></tr></tbody></table></div></article>
         </section>
 
         <section class="page hidden" data-page="keys">

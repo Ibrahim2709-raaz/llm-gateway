@@ -402,6 +402,12 @@ Set `LOCAL_INPUT_COST_PER_MILLION_USD` and
 for allocated infrastructure cost. Electricity and hardware depreciation are
 not estimated automatically.
 
+Context-window values are optional operator metadata configured with
+`OPENAI_CONTEXT_WINDOW_TOKENS`, `ANTHROPIC_CONTEXT_WINDOW_TOKENS`, and
+`LOCAL_CONTEXT_WINDOW_TOKENS`. When omitted, the admin catalog reports them as
+undeclared. This avoids silently relying on model specifications that can
+change over time.
+
 With `model: "auto"`, the router classifies the request as simple, medium, or
 complex, filters enabled OpenAI, Anthropic, and local candidates by provider
 allowlist, capability, and `max_cost_usd`, then applies the requested

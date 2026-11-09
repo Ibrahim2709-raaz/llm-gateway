@@ -68,6 +68,7 @@ class BrowserSessionResponse(PortalSchema):
     active_organization: OrganizationSummary
     csrf_token: str
     expires_at: str
+    platform_role: str | None = None
 
 
 class CurrentAccountResponse(PortalSchema):
@@ -76,6 +77,7 @@ class CurrentAccountResponse(PortalSchema):
     display_name: str
     active_organization_id: UUID
     organizations: list[OrganizationSummary]
+    platform_role: str | None = None
 
 
 class MessageResponse(PortalSchema):

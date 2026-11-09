@@ -366,6 +366,7 @@ async def current_account(
             )
             for membership, organization in memberships
         ],
+        platform_role=identity.authentication.user.platform_role,
     )
 
 

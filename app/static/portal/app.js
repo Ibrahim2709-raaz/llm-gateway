@@ -100,12 +100,15 @@ function renderOrganizationSwitcher() {
 function applyRoleVisibility() {
   const isOwner = state.organization?.role === "owner";
   const canDevelop = ["owner", "developer"].includes(state.organization?.role);
+  const isPlatformOperator = state.account?.platform_role === "platform_operator";
   $$(".owner-only").forEach((element) => element.classList.toggle("hidden", !isOwner));
   $$(".developer-only").forEach((element) => element.classList.toggle("hidden", !canDevelop));
+  $$(".platform-only").forEach((element) => element.classList.toggle("hidden", !isPlatformOperator));
   $('[data-view="audit"]').classList.toggle("hidden", !isOwner);
   if (!isOwner && $('[data-page="audit"]:not(.hidden)')) showPage("overview");
   if (!isOwner && $('[data-page="service-accounts"]:not(.hidden)')) showPage("overview");
   if (!canDevelop && $('[data-page="playground"]:not(.hidden)')) showPage("overview");
+  if (!isPlatformOperator && $('[data-page="admin-models"]:not(.hidden)')) showPage("overview");
 }
 
 async function loadAccount() {
@@ -186,8 +189,27 @@ async function loadPage(name) {
   if (name === "keys") return loadKeys();
   if (name === "service-accounts") return loadServiceAccounts();
   if (name === "routing") return loadRouting();
+  if (name === "admin-models") return loadAdminModels();
   if (name === "team") return loadMembers();
   if (name === "audit") return loadAudit();
+}
+
+async function loadAdminModels() {
+  if (state.account?.platform_role !== "platform_operator") return;
+  const payload = await api("/v1/portal/admin/models");
+  $("#model-catalog-table").innerHTML = payload.data.map((model) => {
+    const available = model.availability === "available";
+    const context = model.context_window_tokens === null
+      ? '<span class="muted">Not declared</span>'
+      : `${formatNumber(model.context_window_tokens)} tokens`;
+    const capabilities = model.capabilities
+      .map((capability) => `<span class="catalog-chip">${escapeHtml(titleCase(capability))}</span>`)
+      .join("");
+    const routing = model.auto_selectable
+      ? `Automatic · up to ${escapeHtml(titleCase(model.max_complexity))}`
+      : "Explicit only";
+    return `<tr><td><strong>${escapeHtml(titleCase(model.provider))}</strong><br><code>${escapeHtml(model.model)}</code></td><td><span class="status-badge ${available ? "success" : "neutral"}">${escapeHtml(titleCase(model.availability))}</span></td><td>${formatMoney(model.input_cost_per_million_usd)}</td><td>${formatMoney(model.output_cost_per_million_usd)}</td><td>${context}</td><td><div class="catalog-chips">${capabilities}</div></td><td>${formatNumber(model.estimated_latency_ms)} ms</td><td>${Math.round(Number(model.quality_score) * 100)} / 100</td><td>${routing}</td></tr>`;
+  }).join("") || '<tr><td colspan="9" class="empty-state">No models are configured.</td></tr>';
 }
 
 async function loadKeys() {

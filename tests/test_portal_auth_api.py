@@ -465,11 +465,13 @@ async def test_logout_revokes_session_and_clears_cookie(monkeypatch: pytest.Monk
 @pytest.mark.anyio
 async def test_current_account_lists_only_service_result(monkeypatch: pytest.MonkeyPatch) -> None:
     identity = browser_identity()
+    identity.authentication.user.platform_role = "platform_operator"
     listing = AsyncMock(return_value=[(identity.membership, identity.organization)])
     monkeypatch.setattr("app.api.routes.portal_auth.list_active_memberships", listing)
     result = await current_account(identity, MagicMock())
     assert result.active_organization_id == identity.organization.id
     assert [item.id for item in result.organizations] == [identity.organization.id]
+    assert result.platform_role == "platform_operator"
 
 
 @pytest.mark.anyio

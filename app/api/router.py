@@ -4,6 +4,7 @@ from app.api.routes import (
     chat,
     health,
     metrics,
+    portal_admin,
     portal_audit,
     portal_auth,
     portal_keys,
@@ -20,6 +21,7 @@ api_router.include_router(chat.router)
 api_router.include_router(health.router)
 api_router.include_router(usage.router)
 api_router.include_router(portal_auth.router)
+api_router.include_router(portal_admin.router)
 api_router.include_router(portal_audit.router)
 api_router.include_router(portal_members.router)
 api_router.include_router(portal_playground.router)
