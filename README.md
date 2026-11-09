@@ -175,6 +175,7 @@ boundary.
 - [Intelligent routing operations and rollback](docs/intelligent-routing-operations.md)
 - [Version 3 product platform roadmap](docs/version-3-roadmap.md)
 - [Version 3 portal design system](docs/portal-design-system.md)
+- [Professor project brief and demo talk track](docs/professor-project-brief.md)
 
 ## Run locally
 
