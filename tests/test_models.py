@@ -15,6 +15,7 @@ from app.db.models import (
     OrganizationMembership,
     OrganizationRoutingPreference,
     ProviderConfig,
+    ProviderPricingProposal,
     RoutingDecisionSnapshot,
     RoutingPolicyActivation,
     RoutingPolicyVersion,
@@ -43,6 +44,7 @@ def test_initial_database_tables_are_registered() -> None:
         OrganizationMembership.__tablename__,
         OrganizationRoutingPreference.__tablename__,
         ProviderConfig.__tablename__,
+        ProviderPricingProposal.__tablename__,
         RoutingDecisionSnapshot.__tablename__,
         RoutingPolicyActivation.__tablename__,
         RoutingPolicyVersion.__tablename__,
@@ -66,6 +68,25 @@ def test_usage_records_snapshot_provider_identity() -> None:
     columns = set(UsageRecord.__table__.columns.keys())
 
     assert {"provider", "model", "input_tokens", "output_tokens", "cost_usd"} <= columns
+
+
+def test_pricing_proposals_capture_review_without_provider_credentials() -> None:
+    columns = set(ProviderPricingProposal.__table__.columns.keys())
+
+    assert {
+        "provider",
+        "model",
+        "input_cost_per_million",
+        "output_cost_per_million",
+        "source_url",
+        "rationale",
+        "status",
+        "proposed_by_user_id",
+        "reviewed_by_user_id",
+        "reviewed_at",
+    } <= columns
+    assert "api_key" not in columns
+    assert "secret" not in columns
 
 
 def test_evaluation_cases_do_not_store_production_customer_identity() -> None:

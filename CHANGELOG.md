@@ -9,6 +9,9 @@ All notable changes to this project are documented in this file.
 - A platform-operator-only model catalog in the portal showing configured
   availability, price estimates, context metadata, capabilities, latency,
   quality, and routing eligibility without exposing provider credentials.
+- A two-person provider-pricing review workflow with sourced proposals,
+  independent approval or rejection, and immutable audit events; approved
+  proposals remain deployment inputs rather than silently changing live costs.
 - Version 3 customer-portal MVP completion: owner-managed service accounts with
   one-time workload credentials and cascading revocation, visible monthly
   budget-threshold alerts, and atomic gateway API-key rotation.

@@ -7,6 +7,7 @@ const state = {
   period: new Date().toISOString().slice(0, 7),
   usage: null,
   preference: "balanced",
+  adminModels: [],
 };
 
 const $ = (selector, root = document) => root.querySelector(selector);
@@ -196,8 +197,12 @@ async function loadPage(name) {
 
 async function loadAdminModels() {
   if (state.account?.platform_role !== "platform_operator") return;
-  const payload = await api("/v1/portal/admin/models");
-  $("#model-catalog-table").innerHTML = payload.data.map((model) => {
+  const [catalog, proposals] = await Promise.all([
+    api("/v1/portal/admin/models"),
+    api("/v1/portal/admin/pricing-proposals?limit=100"),
+  ]);
+  state.adminModels = catalog.data;
+  $("#model-catalog-table").innerHTML = catalog.data.map((model) => {
     const available = model.availability === "available";
     const context = model.context_window_tokens === null
       ? '<span class="muted">Not declared</span>'
@@ -210,6 +215,57 @@ async function loadAdminModels() {
       : "Explicit only";
     return `<tr><td><strong>${escapeHtml(titleCase(model.provider))}</strong><br><code>${escapeHtml(model.model)}</code></td><td><span class="status-badge ${available ? "success" : "neutral"}">${escapeHtml(titleCase(model.availability))}</span></td><td>${formatMoney(model.input_cost_per_million_usd)}</td><td>${formatMoney(model.output_cost_per_million_usd)}</td><td>${context}</td><td><div class="catalog-chips">${capabilities}</div></td><td>${formatNumber(model.estimated_latency_ms)} ms</td><td>${Math.round(Number(model.quality_score) * 100)} / 100</td><td>${routing}</td></tr>`;
   }).join("") || '<tr><td colspan="9" class="empty-state">No models are configured.</td></tr>';
+  $("#pricing-proposals-table").innerHTML = proposals.data.map((proposal) => {
+    const statusClass = proposal.status === "approved" ? "success" : proposal.status === "rejected" ? "danger" : "warning";
+    const canReview = proposal.status === "pending" && proposal.proposed_by_user_id !== state.account.user_id;
+    const actions = canReview
+      ? `<button class="text-button review-pricing" data-proposal-id="${escapeHtml(proposal.id)}" data-decision="approved">Approve</button> <button class="text-button review-pricing" data-proposal-id="${escapeHtml(proposal.id)}" data-decision="rejected">Reject</button>`
+      : proposal.status === "pending" ? '<span class="muted">Independent reviewer required</span>' : "";
+    return `<tr><td><strong>${escapeHtml(titleCase(proposal.provider))}</strong><br><code>${escapeHtml(proposal.model)}</code></td><td>${formatMoney(proposal.input_cost_per_million_usd)}</td><td>${formatMoney(proposal.output_cost_per_million_usd)}</td><td><a href="${escapeHtml(proposal.source_url)}" target="_blank" rel="noopener noreferrer">Evidence ↗</a></td><td><span class="status-badge ${statusClass}">${escapeHtml(titleCase(proposal.status))}</span></td><td>${formatDate(proposal.created_at)}</td><td>${actions}</td></tr>`;
+  }).join("") || '<tr><td colspan="7" class="empty-state">No pricing changes have been proposed.</td></tr>';
+}
+
+function openPricingProposalDialog() {
+  const options = state.adminModels
+    .filter((model) => ["openai", "anthropic", "local"].includes(model.provider))
+    .map((model) => `<option value="${escapeHtml(model.provider)}" data-model="${escapeHtml(model.model)}" data-input="${model.input_cost_per_million_usd}" data-output="${model.output_cost_per_million_usd}">${escapeHtml(titleCase(model.provider))} / ${escapeHtml(model.model)}</option>`)
+    .join("");
+  openDialog({ eyebrow: "PRICING CONTROL", title: "Propose a price update", content: `<form id="pricing-proposal-form"><label>Provider / model<select name="provider">${options}</select></label><label>Model<input name="model" maxlength="128" required></label><div class="form-grid two"><label>Input USD per 1M tokens<input name="input_cost_per_million_usd" type="number" min="0" step="0.000001" required></label><label>Output USD per 1M tokens<input name="output_cost_per_million_usd" type="number" min="0" step="0.000001" required></label></div><label>Official pricing source URL<input name="source_url" type="url" placeholder="https://provider.example/pricing" required></label><label>Reason for change<textarea name="rationale" rows="3" minlength="10" maxlength="1000" required></textarea></label><p class="muted preview-note">A different platform operator must review this proposal. Approval does not silently change live routing.</p><button class="button primary" type="submit">Submit proposal</button></form>` });
+  const form = $("#pricing-proposal-form");
+  const provider = form.elements.provider;
+  const syncModel = () => {
+    const selected = provider.selectedOptions[0];
+    form.elements.model.value = selected?.dataset.model || "";
+    form.elements.input_cost_per_million_usd.value = selected?.dataset.input || "";
+    form.elements.output_cost_per_million_usd.value = selected?.dataset.output || "";
+  };
+  provider.addEventListener("change", syncModel); syncModel();
+  form.addEventListener("submit", async (event) => {
+    event.preventDefault(); setBusy(form, true);
+    try {
+      const values = Object.fromEntries(new FormData(form));
+      values.input_cost_per_million_usd = Number(values.input_cost_per_million_usd);
+      values.output_cost_per_million_usd = Number(values.output_cost_per_million_usd);
+      await api("/v1/portal/admin/pricing-proposals", { method: "POST", body: values });
+      $("#form-dialog").close(); toast("Pricing proposal submitted for independent review.");
+      await loadAdminModels();
+    } catch (error) { toast(error.message, true); }
+    finally { setBusy(form, false); }
+  });
+}
+
+function openPricingReviewDialog(proposalId, decision) {
+  openDialog({ eyebrow: "INDEPENDENT REVIEW", title: `${titleCase(decision)} price proposal`, content: `<form id="pricing-review-form"><label>Review note<textarea name="review_note" rows="4" minlength="3" maxlength="1000" required placeholder="Record the evidence you checked and why."></textarea></label><p class="muted preview-note">This decision is written to the immutable platform audit trail.</p><button class="button ${decision === "rejected" ? "danger" : "primary"}" type="submit">${escapeHtml(titleCase(decision))}</button></form>` });
+  const form = $("#pricing-review-form");
+  form.addEventListener("submit", async (event) => {
+    event.preventDefault(); setBusy(form, true);
+    try {
+      const review_note = new FormData(form).get("review_note");
+      await api(`/v1/portal/admin/pricing-proposals/${proposalId}/review`, { method: "POST", body: { decision, review_note } });
+      $("#form-dialog").close(); toast(`Pricing proposal ${decision}.`); await loadAdminModels();
+    } catch (error) { toast(error.message, true); }
+    finally { setBusy(form, false); }
+  });
 }
 
 async function loadKeys() {
@@ -474,7 +530,12 @@ function bindEvents() {
 
   $("#new-key-button").addEventListener("click", openCreateKeyDialog);
   $("#new-service-account-button").addEventListener("click", openCreateServiceAccountDialog);
+  $("#new-pricing-proposal-button").addEventListener("click", openPricingProposalDialog);
   $("#invite-button").addEventListener("click", openInviteDialog);
+  $("#pricing-proposals-table").addEventListener("click", (event) => {
+    const button = event.target.closest(".review-pricing");
+    if (button) openPricingReviewDialog(button.dataset.proposalId, button.dataset.decision);
+  });
   $("#keys-table").addEventListener("click", async (event) => {
     const rotateButton = event.target.closest(".rotate-key");
     if (rotateButton) {

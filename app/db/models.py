@@ -31,6 +31,7 @@ from app.identity.roles import (
     USER_ACTION_TOKEN_PURPOSES,
     USER_STATUSES,
 )
+from app.platform.taxonomy import PRICING_PROPOSAL_STATUSES
 from app.routing.taxonomy import (
     COLD_START_MODES,
     EVALUATION_CASE_OUTCOMES,
@@ -292,6 +293,52 @@ class ProviderConfig(UUIDPrimaryKeyMixin, TimestampMixin, Base):
         Numeric(14, 6), default=Decimal("0"), nullable=False
     )
     settings: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict, nullable=False)
+
+
+class ProviderPricingProposal(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "provider_pricing_proposals"
+    __table_args__ = (
+        CheckConstraint(
+            f"status IN ({_sql_values(PRICING_PROPOSAL_STATUSES)})",
+            name="provider_pricing_proposal_status",
+        ),
+        CheckConstraint(
+            "input_cost_per_million >= 0 AND output_cost_per_million >= 0",
+            name="provider_pricing_proposal_non_negative_cost",
+        ),
+        CheckConstraint(
+            "reviewed_by_user_id IS NULL OR proposed_by_user_id <> reviewed_by_user_id",
+            name="provider_pricing_proposal_distinct_reviewer",
+        ),
+        CheckConstraint(
+            "(status = 'pending' AND reviewed_by_user_id IS NULL AND reviewed_at IS NULL) OR "
+            "(status IN ('approved', 'rejected') AND reviewed_by_user_id IS NOT NULL "
+            "AND reviewed_at IS NOT NULL)",
+            name="provider_pricing_proposal_review_state",
+        ),
+        Index(
+            "ix_provider_pricing_proposals_model_created",
+            "provider",
+            "model",
+            "created_at",
+        ),
+    )
+
+    provider: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    model: Mapped[str] = mapped_column(String(128), nullable=False, index=True)
+    input_cost_per_million: Mapped[Decimal] = mapped_column(Numeric(14, 6), nullable=False)
+    output_cost_per_million: Mapped[Decimal] = mapped_column(Numeric(14, 6), nullable=False)
+    source_url: Mapped[str] = mapped_column(String(2_048), nullable=False)
+    rationale: Mapped[str] = mapped_column(String(1_000), nullable=False)
+    status: Mapped[str] = mapped_column(String(32), default="pending", nullable=False, index=True)
+    proposed_by_user_id: Mapped[UUID] = mapped_column(
+        ForeignKey("users.id", ondelete="RESTRICT"), nullable=False, index=True
+    )
+    reviewed_by_user_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("users.id", ondelete="RESTRICT"), index=True
+    )
+    review_note: Mapped[str | None] = mapped_column(String(1_000))
+    reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), index=True)
 
 
 class BudgetLimit(UUIDPrimaryKeyMixin, TimestampMixin, Base):
