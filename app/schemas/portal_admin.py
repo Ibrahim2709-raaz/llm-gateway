@@ -63,3 +63,59 @@ class PricingProposalResponse(AdminSchema):
 
 class PricingProposalListResponse(AdminSchema):
     data: list[PricingProposalResponse]
+
+
+class EvaluationRunResponse(AdminSchema):
+    id: UUID
+    dataset_name: str
+    dataset_version: str
+    provider: str
+    model: str
+    status: Literal["pending", "running", "completed", "failed"]
+    runner_version: str
+    case_count: int = Field(ge=0)
+    failed_case_count: int = Field(ge=0)
+    average_score: float | None = Field(default=None, ge=0, le=1)
+    total_cost_usd: Decimal = Field(ge=0)
+    started_at: datetime | None
+    completed_at: datetime | None
+
+
+class EvaluationRunListResponse(AdminSchema):
+    data: list[EvaluationRunResponse]
+
+
+class EvaluationFailureResponse(AdminSchema):
+    result_id: UUID
+    case_external_id: str
+    task_category: str
+    difficulty: str
+    outcome: Literal["completed", "failed", "timed_out", "refused"]
+    score: Decimal | None
+    error_code: str | None
+    prompt_tokens: int = Field(ge=0)
+    completion_tokens: int = Field(ge=0)
+    cost_usd: Decimal = Field(ge=0)
+    latency_ms: int = Field(ge=0)
+
+
+class EvaluationFailureListResponse(AdminSchema):
+    data: list[EvaluationFailureResponse]
+    prompts_exposed: bool = False
+    outputs_exposed: bool = False
+
+
+class ScoreVersionResponse(AdminSchema):
+    provider: str
+    model: str
+    score_version: str
+    status: Literal["draft", "active", "retired"]
+    score_count: int = Field(ge=1)
+    sample_count: int = Field(ge=1)
+    weighted_quality_score: float = Field(ge=0, le=1)
+    task_categories: list[str]
+    valid_until: datetime | None
+
+
+class ScoreVersionListResponse(AdminSchema):
+    data: list[ScoreVersionResponse]

@@ -12,6 +12,8 @@ All notable changes to this project are documented in this file.
 - A two-person provider-pricing review workflow with sourced proposals,
   independent approval or rejection, and immutable audit events; approved
   proposals remain deployment inputs rather than silently changing live costs.
+- A privacy-safe platform evaluation console for run history, failure metadata,
+  and side-by-side score-version summaries without exposing prompts or outputs.
 - Version 3 customer-portal MVP completion: owner-managed service accounts with
   one-time workload credentials and cascading revocation, visible monthly
   budget-threshold alerts, and atomic gateway API-key rotation.

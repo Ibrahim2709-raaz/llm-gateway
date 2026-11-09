@@ -9,14 +9,22 @@ from fastapi.testclient import TestClient
 
 from app.api.routes.portal_admin import (
     create_admin_pricing_proposal,
+    list_admin_evaluation_failures,
+    list_admin_evaluation_runs,
     list_admin_models,
     list_admin_pricing_proposals,
+    list_admin_score_versions,
     review_admin_pricing_proposal,
 )
 from app.core.config import Settings
 from app.core.errors import GatewayError
 from app.db.models import ProviderPricingProposal
 from app.identity.authorization import Principal
+from app.platform.evaluation_console import (
+    EvaluationFailureView,
+    EvaluationRunView,
+    ScoreVersionView,
+)
 from app.platform.model_catalog import build_model_catalog
 from app.platform.pricing import PricingProposalError
 from app.schemas.portal_admin import (
@@ -129,6 +137,63 @@ def test_admin_model_catalog_is_in_openapi_contract(client: TestClient) -> None:
     response = client.get("/openapi.json")
     assert "/v1/portal/admin/models" in response.json()["paths"]
     assert "/v1/portal/admin/pricing-proposals" in response.json()["paths"]
+    assert "/v1/portal/admin/evaluations/runs" in response.json()["paths"]
+    assert "/v1/portal/admin/evaluations/scores" in response.json()["paths"]
+
+
+@pytest.mark.anyio
+async def test_operator_can_inspect_evaluation_summaries(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    run = EvaluationRunView(
+        id=uuid4(), dataset_name="smoke", dataset_version="1.0", provider="mock",
+        model="mock-1", status="completed", runner_version="runner-v1", case_count=3,
+        failed_case_count=1, average_score=0.5, total_cost_usd=Decimal("0"),
+        started_at=NOW, completed_at=NOW,
+    )
+    score = ScoreVersionView(
+        provider="mock", model="mock-1", score_version="scores-v1", status="draft",
+        score_count=2, sample_count=3, weighted_quality_score=0.5,
+        task_categories=("reasoning",), valid_until=None,
+    )
+    monkeypatch.setattr(
+        "app.api.routes.portal_admin.list_evaluation_runs", AsyncMock(return_value=[run])
+    )
+    monkeypatch.setattr(
+        "app.api.routes.portal_admin.list_score_versions", AsyncMock(return_value=[score])
+    )
+
+    runs = await list_admin_evaluation_runs(operator_identity(), MagicMock(), 100)
+    scores = await list_admin_score_versions(operator_identity(), MagicMock())
+
+    assert runs.data[0].failed_case_count == 1
+    assert scores.data[0].sample_count == 3
+
+
+@pytest.mark.anyio
+async def test_failure_endpoint_never_exposes_prompts_or_outputs(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    failure = EvaluationFailureView(
+        result_id=uuid4(), case_external_id="case-1", task_category="coding",
+        difficulty="simple", outcome="failed", score=Decimal("0"),
+        error_code="provider_error", prompt_tokens=2, completion_tokens=0,
+        cost_usd=Decimal("0"), latency_ms=10,
+    )
+    monkeypatch.setattr(
+        "app.api.routes.portal_admin.list_evaluation_failures",
+        AsyncMock(return_value=[failure]),
+    )
+
+    response = await list_admin_evaluation_failures(
+        uuid4(), operator_identity(), MagicMock(), 100
+    )
+
+    serialized = response.model_dump()
+    assert serialized["prompts_exposed"] is False
+    assert serialized["outputs_exposed"] is False
+    assert "prompt" not in serialized["data"][0]
+    assert "actual_output" not in serialized["data"][0]
 
 
 @pytest.mark.anyio

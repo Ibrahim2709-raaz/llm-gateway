@@ -1,3 +1,4 @@
+from dataclasses import asdict
 from typing import Annotated
 from uuid import UUID
 
@@ -19,6 +20,11 @@ from app.identity.dependencies import (
     authenticate_portal_session,
     require_portal_csrf,
 )
+from app.platform.evaluation_console import (
+    list_evaluation_failures,
+    list_evaluation_runs,
+    list_score_versions,
+)
 from app.platform.model_catalog import build_model_catalog
 from app.platform.pricing import (
     PricingProposalError,
@@ -28,11 +34,17 @@ from app.platform.pricing import (
 )
 from app.schemas.portal_admin import (
     CreatePricingProposalRequest,
+    EvaluationFailureListResponse,
+    EvaluationFailureResponse,
+    EvaluationRunListResponse,
+    EvaluationRunResponse,
     ModelCatalogEntry,
     ModelCatalogResponse,
     PricingProposalListResponse,
     PricingProposalResponse,
     ReviewPricingProposalRequest,
+    ScoreVersionListResponse,
+    ScoreVersionResponse,
 )
 
 router = APIRouter(prefix="/v1/portal/admin", tags=["Portal administration"])
@@ -155,6 +167,75 @@ async def create_admin_pricing_proposal(
         await database.rollback()
         raise
     return _proposal_response(proposal)
+
+
+@router.get(
+    "/evaluations/runs",
+    response_model=EvaluationRunListResponse,
+    operation_id="listAdminEvaluationRuns",
+)
+async def list_admin_evaluation_runs(
+    identity: Annotated[BrowserIdentity, Depends(authenticate_portal_session)],
+    database: Annotated[AsyncSession, Depends(get_database_session)],
+    limit: Annotated[int, Query(ge=1, le=200)] = 100,
+) -> EvaluationRunListResponse:
+    _require_platform_operator(identity)
+    runs = await list_evaluation_runs(database, limit=limit)
+    return EvaluationRunListResponse(data=[EvaluationRunResponse(**asdict(run)) for run in runs])
+
+
+@router.get(
+    "/evaluations/runs/{run_id}/failures",
+    response_model=EvaluationFailureListResponse,
+    operation_id="listAdminEvaluationFailures",
+)
+async def list_admin_evaluation_failures(
+    run_id: UUID,
+    identity: Annotated[BrowserIdentity, Depends(authenticate_portal_session)],
+    database: Annotated[AsyncSession, Depends(get_database_session)],
+    limit: Annotated[int, Query(ge=1, le=200)] = 100,
+) -> EvaluationFailureListResponse:
+    _require_platform_operator(identity)
+    try:
+        failures = await list_evaluation_failures(database, run_id=run_id, limit=limit)
+    except ValueError as exc:
+        raise GatewayError(
+            "Evaluation run was not found.",
+            code="evaluation_run_not_found",
+            status_code=status.HTTP_404_NOT_FOUND,
+        ) from exc
+    return EvaluationFailureListResponse(
+        data=[EvaluationFailureResponse(**asdict(item)) for item in failures]
+    )
+
+
+@router.get(
+    "/evaluations/scores",
+    response_model=ScoreVersionListResponse,
+    operation_id="listAdminScoreVersions",
+)
+async def list_admin_score_versions(
+    identity: Annotated[BrowserIdentity, Depends(authenticate_portal_session)],
+    database: Annotated[AsyncSession, Depends(get_database_session)],
+) -> ScoreVersionListResponse:
+    _require_platform_operator(identity)
+    scores = await list_score_versions(database)
+    return ScoreVersionListResponse(
+        data=[
+            ScoreVersionResponse(
+                provider=item.provider,
+                model=item.model,
+                score_version=item.score_version,
+                status=item.status,
+                score_count=item.score_count,
+                sample_count=item.sample_count,
+                weighted_quality_score=item.weighted_quality_score,
+                task_categories=list(item.task_categories),
+                valid_until=item.valid_until,
+            )
+            for item in scores
+        ]
+    )
 
 
 @router.post(

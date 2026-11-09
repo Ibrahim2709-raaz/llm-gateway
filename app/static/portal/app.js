@@ -110,6 +110,7 @@ function applyRoleVisibility() {
   if (!isOwner && $('[data-page="service-accounts"]:not(.hidden)')) showPage("overview");
   if (!canDevelop && $('[data-page="playground"]:not(.hidden)')) showPage("overview");
   if (!isPlatformOperator && $('[data-page="admin-models"]:not(.hidden)')) showPage("overview");
+  if (!isPlatformOperator && $('[data-page="admin-evaluations"]:not(.hidden)')) showPage("overview");
 }
 
 async function loadAccount() {
@@ -191,8 +192,37 @@ async function loadPage(name) {
   if (name === "service-accounts") return loadServiceAccounts();
   if (name === "routing") return loadRouting();
   if (name === "admin-models") return loadAdminModels();
+  if (name === "admin-evaluations") return loadAdminEvaluations();
   if (name === "team") return loadMembers();
   if (name === "audit") return loadAudit();
+}
+
+async function loadAdminEvaluations() {
+  if (state.account?.platform_role !== "platform_operator") return;
+  const [runs, scores] = await Promise.all([
+    api("/v1/portal/admin/evaluations/runs?limit=100"),
+    api("/v1/portal/admin/evaluations/scores"),
+  ]);
+  $("#evaluation-run-count").textContent = formatNumber(runs.data.length);
+  $("#evaluation-completed-count").textContent = formatNumber(runs.data.filter((run) => run.status === "completed").length);
+  $("#evaluation-failure-count").textContent = formatNumber(runs.data.reduce((total, run) => total + run.failed_case_count, 0));
+  $("#score-version-count").textContent = formatNumber(scores.data.length);
+  $("#evaluation-runs-table").innerHTML = runs.data.map((run) => {
+    const statusClass = run.status === "completed" ? "success" : run.status === "failed" ? "danger" : run.status === "running" ? "warning" : "neutral";
+    const review = run.failed_case_count > 0 ? `<button class="text-button review-evaluation-failures" data-run-id="${escapeHtml(run.id)}" data-run-label="${escapeHtml(`${run.provider} / ${run.model}`)}">Review</button>` : "";
+    return `<tr><td><strong>${escapeHtml(run.dataset_name)}</strong><br><code>${escapeHtml(run.dataset_version)}</code></td><td>${escapeHtml(titleCase(run.provider))}<br><code>${escapeHtml(run.model)}</code></td><td><span class="status-badge ${statusClass}">${escapeHtml(titleCase(run.status))}</span></td><td>${formatNumber(run.case_count)}</td><td>${formatNumber(run.failed_case_count)}</td><td>${run.average_score === null ? "—" : `${Math.round(Number(run.average_score) * 100)} / 100`}</td><td>${formatMoney(run.total_cost_usd)}</td><td>${run.completed_at ? formatDate(run.completed_at) : "—"}</td><td>${review}</td></tr>`;
+  }).join("") || '<tr><td colspan="9" class="empty-state">No evaluation runs yet. Use the operator CLI to create and execute one.</td></tr>';
+  $("#score-versions-table").innerHTML = scores.data.map((score) => {
+    const statusClass = score.status === "active" ? "success" : score.status === "draft" ? "warning" : "neutral";
+    return `<tr><td><strong>${escapeHtml(titleCase(score.provider))}</strong><br><code>${escapeHtml(score.model)}</code></td><td><code>${escapeHtml(score.score_version)}</code></td><td><span class="status-badge ${statusClass}">${escapeHtml(titleCase(score.status))}</span></td><td>${Math.round(Number(score.weighted_quality_score) * 100)} / 100</td><td>${formatNumber(score.sample_count)}</td><td>${formatNumber(score.score_count)}</td><td>${score.task_categories.map((item) => escapeHtml(titleCase(item))).join(", ")}</td><td>${score.valid_until ? formatDate(score.valid_until) : "Not active"}</td></tr>`;
+  }).join("") || '<tr><td colspan="8" class="empty-state">No score versions have been generated.</td></tr>';
+}
+
+async function loadEvaluationFailures(runId, label) {
+  const payload = await api(`/v1/portal/admin/evaluations/runs/${runId}/failures?limit=100`);
+  $("#evaluation-failures-card").classList.remove("hidden");
+  $("#evaluation-failures-title").textContent = `Failed cases · ${label}`;
+  $("#evaluation-failures-table").innerHTML = payload.data.map((failure) => `<tr><td><code>${escapeHtml(failure.case_external_id)}</code></td><td>${escapeHtml(titleCase(failure.task_category))} · ${escapeHtml(titleCase(failure.difficulty))}</td><td>${escapeHtml(titleCase(failure.outcome))}</td><td>${failure.score === null ? "—" : `${Math.round(Number(failure.score) * 100)} / 100`}</td><td>${escapeHtml(failure.error_code || "—")}</td><td>${formatNumber(failure.prompt_tokens + failure.completion_tokens)}</td><td>${formatMoney(failure.cost_usd)}</td><td>${formatNumber(failure.latency_ms)} ms</td></tr>`).join("") || '<tr><td colspan="8" class="empty-state">No failed or zero-score cases were found.</td></tr>';
 }
 
 async function loadAdminModels() {
@@ -535,6 +565,10 @@ function bindEvents() {
   $("#pricing-proposals-table").addEventListener("click", (event) => {
     const button = event.target.closest(".review-pricing");
     if (button) openPricingReviewDialog(button.dataset.proposalId, button.dataset.decision);
+  });
+  $("#evaluation-runs-table").addEventListener("click", (event) => {
+    const button = event.target.closest(".review-evaluation-failures");
+    if (button) loadEvaluationFailures(button.dataset.runId, button.dataset.runLabel).catch((error) => toast(error.message, true));
   });
   $("#keys-table").addEventListener("click", async (event) => {
     const rotateButton = event.target.closest(".rotate-key");
