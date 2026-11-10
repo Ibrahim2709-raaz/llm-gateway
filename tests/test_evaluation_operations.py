@@ -18,9 +18,12 @@ from app.evaluations.operations import (
     create_candidate_scores,
     create_evaluation_run,
     inspect_evaluation_run,
+    list_evaluation_datasets,
+    preview_evaluation_run,
     seed_smoke_evaluation_dataset,
 )
 from app.evaluations.service import RUNNER_VERSION
+from app.providers.mock import MockProvider
 
 
 def scalar_result(values: list[str]) -> Mock:
@@ -89,6 +92,70 @@ async def test_create_run_pins_dataset_provider_model_and_runner() -> None:
     assert run.model == "mock-1"
     assert run.configuration["dataset_version"] == SMOKE_DATASET_VERSION
     session.add.assert_called_once_with(run)
+
+
+@pytest.mark.anyio
+async def test_list_active_evaluation_datasets_returns_case_counts() -> None:
+    dataset = EvaluationDataset(
+        id=uuid4(),
+        name="coding-core",
+        version="1.0",
+        description="Coding evidence",
+        status="active",
+        configuration={},
+    )
+    rows = Mock()
+    rows.all.return_value = [(dataset, 12)]
+    session = AsyncMock(spec=AsyncSession)
+    session.execute.return_value = rows
+
+    datasets = await list_evaluation_datasets(session)
+
+    assert datasets[0].name == "coding-core"
+    assert datasets[0].case_count == 12
+
+
+@pytest.mark.anyio
+async def test_evaluation_preflight_estimates_tokens_and_cost_without_running() -> None:
+    dataset = EvaluationDataset(
+        id=uuid4(),
+        name="evaluation-smoke",
+        version="1.0.0",
+        description="Synthetic",
+        status="active",
+        configuration={},
+    )
+    case = EvaluationCase(
+        id=uuid4(),
+        dataset_id=dataset.id,
+        external_id="one",
+        task_category="reasoning",
+        difficulty="simple",
+        prompt={
+            "messages": [{"role": "user", "content": "Say Paris"}],
+            "max_tokens": 128,
+        },
+        scoring_configuration={"method": "unscored"},
+    )
+    scalar_rows = Mock()
+    scalar_rows.all.return_value = [case]
+    session = AsyncMock(spec=AsyncSession)
+    session.scalar.return_value = dataset
+    session.scalars.return_value = scalar_rows
+
+    preview = await preview_evaluation_run(
+        session,
+        dataset_name=dataset.name,
+        dataset_version=dataset.version,
+        provider=MockProvider(),
+    )
+
+    assert preview.provider == "mock"
+    assert preview.case_count == 1
+    assert preview.estimated_input_tokens > 0
+    assert preview.maximum_output_tokens == 128
+    assert preview.estimated_max_cost_usd == Decimal("0E-8")
+    assert preview.paid_provider is False
 
 
 @pytest.mark.anyio

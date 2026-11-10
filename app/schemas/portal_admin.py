@@ -85,6 +85,65 @@ class EvaluationRunListResponse(AdminSchema):
     data: list[EvaluationRunResponse]
 
 
+class EvaluationDatasetResponse(AdminSchema):
+    name: str
+    version: str
+    description: str
+    case_count: int = Field(ge=0)
+
+
+class EvaluationDatasetListResponse(AdminSchema):
+    data: list[EvaluationDatasetResponse]
+
+
+class EvaluationPreflightRequest(AdminSchema):
+    dataset_name: str = Field(min_length=1, max_length=200)
+    dataset_version: str = Field(min_length=1, max_length=64)
+    provider: str = Field(min_length=1, max_length=64)
+    model: str = Field(min_length=1, max_length=128)
+
+
+class EvaluationPreflightResponse(AdminSchema):
+    dataset_name: str
+    dataset_version: str
+    provider: str
+    model: str
+    case_count: int = Field(ge=1)
+    estimated_input_tokens: int = Field(ge=1)
+    maximum_output_tokens: int = Field(ge=1)
+    estimated_max_cost_usd: Decimal = Field(ge=0)
+    paid_provider: bool
+
+
+class CreateEvaluationRunRequest(EvaluationPreflightRequest):
+    approved_max_cost_usd: Decimal = Field(ge=0, max_digits=18, decimal_places=8)
+    confirmation: Literal["CREATE_EVALUATION"]
+
+
+class ExecuteEvaluationRunRequest(AdminSchema):
+    confirmation: Literal["RUN_EVALUATION"]
+
+
+class EvaluationExecutionResponse(AdminSchema):
+    run_id: UUID
+    status: Literal["completed"]
+    completed_cases: int = Field(ge=0)
+    skipped_cases: int = Field(ge=0)
+    failed_cases: int = Field(ge=0)
+    average_score: float | None = Field(default=None, ge=0, le=1)
+    total_cost_usd: Decimal = Field(ge=0)
+
+
+class PublishEvaluationScoresRequest(AdminSchema):
+    score_version: str = Field(min_length=1, max_length=64)
+
+
+class PublishEvaluationScoresResponse(AdminSchema):
+    score_version: str
+    score_count: int = Field(ge=1)
+    sample_count: int = Field(ge=1)
+
+
 class EvaluationFailureResponse(AdminSchema):
     result_id: UUID
     case_external_id: str
@@ -119,3 +178,44 @@ class ScoreVersionResponse(AdminSchema):
 
 class ScoreVersionListResponse(AdminSchema):
     data: list[ScoreVersionResponse]
+
+
+class ScoreComparisonRowResponse(AdminSchema):
+    task_category: str
+    difficulty: str
+    candidate_quality: Decimal = Field(ge=0, le=1)
+    active_quality: Decimal | None = Field(default=None, ge=0, le=1)
+    quality_delta: Decimal | None
+    candidate_samples: int = Field(ge=1)
+    candidate_variance: Decimal | None = Field(default=None, ge=0)
+    capabilities: list[str]
+
+
+class ScoreComparisonResponse(AdminSchema):
+    provider: str
+    model: str
+    candidate_version: str
+    candidate_status: Literal["draft", "active", "retired"]
+    active_version: str | None
+    rows: list[ScoreComparisonRowResponse]
+
+
+class ChangeScoreActivationRequest(AdminSchema):
+    provider: str = Field(min_length=1, max_length=64)
+    model: str = Field(min_length=1, max_length=128)
+    score_version: str = Field(min_length=1, max_length=64)
+    action: Literal["activate", "rollback"]
+    reason: str = Field(min_length=3, max_length=500)
+    valid_days: int = Field(default=30, ge=1, le=365)
+    minimum_samples: int = Field(default=5, ge=1)
+    confirmation: Literal["CHANGE_SCORE_SET"]
+
+
+class ScoreActivationResponse(AdminSchema):
+    provider: str
+    model: str
+    score_version: str
+    previous_score_version: str | None
+    action: Literal["activate", "rollback"]
+    score_count: int = Field(ge=1)
+    valid_until: datetime

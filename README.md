@@ -409,6 +409,15 @@ Context-window values are optional operator metadata configured with
 undeclared. This avoids silently relying on model specifications that can
 change over time.
 
+Platform operators can manage evaluation evidence from the portal without
+database access. A preflight calculates the dataset size and maximum configured
+token cost without calling a provider. Creating a pending run pins that estimate
+and an approved ceiling; execution is a separate confirmed action and is blocked
+if the current estimate has risen above the ceiling. Completed, failure-free
+runs can publish immutable draft score versions. The portal compares those
+scores with the active baseline before an audited activation or rollback, and
+never returns stored prompts or model outputs through the operator APIs.
+
 With `model: "auto"`, the router classifies the request as simple, medium, or
 complex, filters enabled OpenAI, Anthropic, and local candidates by provider
 allowlist, capability, and `max_cost_usd`, then applies the requested

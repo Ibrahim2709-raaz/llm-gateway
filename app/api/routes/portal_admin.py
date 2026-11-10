@@ -1,5 +1,6 @@
 from dataclasses import asdict
-from typing import Annotated
+from decimal import Decimal
+from typing import Annotated, cast
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query, Request, status
@@ -7,8 +8,20 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import Settings, get_settings
 from app.core.errors import GatewayError
-from app.db.models import ProviderPricingProposal
+from app.db.models import EvaluationRun, ProviderPricingProposal
 from app.db.session import get_database_session
+from app.evaluations.operations import (
+    create_candidate_scores,
+    create_evaluation_run,
+    list_evaluation_datasets,
+    preview_evaluation_run,
+)
+from app.evaluations.score_activation import (
+    ScoreActivationError,
+    change_active_score_set,
+    compare_score_version,
+)
+from app.evaluations.service import DatabaseEvaluationService, EvaluationRunError
 from app.identity.audit import append_audit_event
 from app.identity.authorization import (
     PLATFORM_MANAGE,
@@ -32,17 +45,31 @@ from app.platform.pricing import (
     list_pricing_proposals,
     review_pricing_proposal,
 )
+from app.providers.base import ChatProvider
 from app.schemas.portal_admin import (
+    ChangeScoreActivationRequest,
+    CreateEvaluationRunRequest,
     CreatePricingProposalRequest,
+    EvaluationDatasetListResponse,
+    EvaluationDatasetResponse,
+    EvaluationExecutionResponse,
     EvaluationFailureListResponse,
     EvaluationFailureResponse,
+    EvaluationPreflightRequest,
+    EvaluationPreflightResponse,
     EvaluationRunListResponse,
     EvaluationRunResponse,
+    ExecuteEvaluationRunRequest,
     ModelCatalogEntry,
     ModelCatalogResponse,
     PricingProposalListResponse,
     PricingProposalResponse,
+    PublishEvaluationScoresRequest,
+    PublishEvaluationScoresResponse,
     ReviewPricingProposalRequest,
+    ScoreActivationResponse,
+    ScoreComparisonResponse,
+    ScoreComparisonRowResponse,
     ScoreVersionListResponse,
     ScoreVersionResponse,
 )
@@ -77,6 +104,34 @@ def _proposal_response(proposal: ProviderPricingProposal) -> PricingProposalResp
         review_note=proposal.review_note,
         created_at=proposal.created_at,
         reviewed_at=proposal.reviewed_at,
+    )
+
+
+def _find_provider(request: Request, *, provider: str, model: str) -> ChatProvider:
+    match = next(
+        (
+            candidate
+            for candidate in request.app.state.resources.providers
+            if candidate.name == provider and candidate.model == model
+        ),
+        None,
+    )
+    if match is None:
+        raise GatewayError(
+            "The requested provider model is not enabled.",
+            code="provider_not_available",
+            status_code=status.HTTP_409_CONFLICT,
+        )
+    return cast(ChatProvider, match)
+
+
+def _evaluation_error(error: ValueError | TypeError) -> GatewayError:
+    message = str(error)
+    not_found = "was not found" in message
+    return GatewayError(
+        message,
+        code="evaluation_resource_not_found" if not_found else "evaluation_invalid",
+        status_code=(status.HTTP_404_NOT_FOUND if not_found else status.HTTP_409_CONFLICT),
     )
 
 
@@ -170,6 +225,134 @@ async def create_admin_pricing_proposal(
 
 
 @router.get(
+    "/evaluations/datasets",
+    response_model=EvaluationDatasetListResponse,
+    operation_id="listAdminEvaluationDatasets",
+)
+async def list_admin_evaluation_datasets(
+    identity: Annotated[BrowserIdentity, Depends(authenticate_portal_session)],
+    database: Annotated[AsyncSession, Depends(get_database_session)],
+) -> EvaluationDatasetListResponse:
+    _require_platform_operator(identity)
+    datasets = await list_evaluation_datasets(database)
+    return EvaluationDatasetListResponse(
+        data=[EvaluationDatasetResponse(**asdict(dataset)) for dataset in datasets]
+    )
+
+
+@router.post(
+    "/evaluations/preflight",
+    response_model=EvaluationPreflightResponse,
+    operation_id="previewAdminEvaluationRun",
+)
+async def preview_admin_evaluation_run(
+    payload: EvaluationPreflightRequest,
+    request: Request,
+    identity: Annotated[BrowserIdentity, Depends(authenticate_portal_session)],
+    database: Annotated[AsyncSession, Depends(get_database_session)],
+) -> EvaluationPreflightResponse:
+    _require_platform_operator(identity)
+    provider = _find_provider(request, provider=payload.provider, model=payload.model)
+    try:
+        preview = await preview_evaluation_run(
+            database,
+            dataset_name=payload.dataset_name,
+            dataset_version=payload.dataset_version,
+            provider=provider,
+        )
+    except (ValueError, TypeError) as exc:
+        raise _evaluation_error(exc) from exc
+    return EvaluationPreflightResponse(**asdict(preview))
+
+
+@router.post(
+    "/evaluations/runs",
+    response_model=EvaluationRunResponse,
+    status_code=status.HTTP_201_CREATED,
+    operation_id="createAdminEvaluationRun",
+)
+async def create_admin_evaluation_run(
+    payload: CreateEvaluationRunRequest,
+    request: Request,
+    identity: Annotated[BrowserIdentity, Depends(require_portal_csrf)],
+    database: Annotated[AsyncSession, Depends(get_database_session)],
+) -> EvaluationRunResponse:
+    _require_platform_operator(identity)
+    provider = _find_provider(request, provider=payload.provider, model=payload.model)
+    try:
+        preview = await preview_evaluation_run(
+            database,
+            dataset_name=payload.dataset_name,
+            dataset_version=payload.dataset_version,
+            provider=provider,
+        )
+        if payload.approved_max_cost_usd < preview.estimated_max_cost_usd:
+            raise GatewayError(
+                "Approved cost ceiling is below the current preflight estimate.",
+                code="evaluation_cost_ceiling_too_low",
+                status_code=status.HTTP_409_CONFLICT,
+            )
+        run = await create_evaluation_run(
+            database,
+            dataset_name=payload.dataset_name,
+            dataset_version=payload.dataset_version,
+            provider=provider.name,
+            model=provider.model,
+        )
+        run.configuration = {
+            **run.configuration,
+            "estimated_max_cost_usd": str(preview.estimated_max_cost_usd),
+            "approved_max_cost_usd": str(payload.approved_max_cost_usd),
+            "created_by_user_id": str(identity.authentication.user.id),
+        }
+        run.aggregate_metrics = {
+            "case_count": preview.case_count,
+            "failed_case_count": 0,
+            "total_cost_usd": "0",
+        }
+        await append_audit_event(
+            database,
+            principal=identity.principal,
+            action="evaluation_run.created",
+            resource_type="evaluation_run",
+            resource_id=str(run.id),
+            event_data={
+                "dataset_name": preview.dataset_name,
+                "dataset_version": preview.dataset_version,
+                "provider": preview.provider,
+                "model": preview.model,
+                "estimated_max_cost_usd": str(preview.estimated_max_cost_usd),
+                "approved_max_cost_usd": str(payload.approved_max_cost_usd),
+            },
+        )
+        await database.commit()
+    except GatewayError:
+        await database.rollback()
+        raise
+    except (ValueError, TypeError) as exc:
+        await database.rollback()
+        raise _evaluation_error(exc) from exc
+    except Exception:
+        await database.rollback()
+        raise
+    return EvaluationRunResponse(
+        id=run.id,
+        dataset_name=preview.dataset_name,
+        dataset_version=preview.dataset_version,
+        provider=run.provider,
+        model=run.model,
+        status=run.status,
+        runner_version=run.runner_version,
+        case_count=preview.case_count,
+        failed_case_count=0,
+        average_score=None,
+        total_cost_usd=0,
+        started_at=None,
+        completed_at=None,
+    )
+
+
+@router.get(
     "/evaluations/runs",
     response_model=EvaluationRunListResponse,
     operation_id="listAdminEvaluationRuns",
@@ -209,6 +392,136 @@ async def list_admin_evaluation_failures(
     )
 
 
+@router.post(
+    "/evaluations/runs/{run_id}/execute",
+    response_model=EvaluationExecutionResponse,
+    operation_id="executeAdminEvaluationRun",
+)
+async def execute_admin_evaluation_run(
+    run_id: UUID,
+    _payload: ExecuteEvaluationRunRequest,
+    request: Request,
+    identity: Annotated[BrowserIdentity, Depends(require_portal_csrf)],
+    database: Annotated[AsyncSession, Depends(get_database_session)],
+) -> EvaluationExecutionResponse:
+    _require_platform_operator(identity)
+    run = await database.get(EvaluationRun, run_id)
+    if run is None:
+        raise GatewayError(
+            "Evaluation run was not found.",
+            code="evaluation_run_not_found",
+            status_code=status.HTTP_404_NOT_FOUND,
+        )
+    provider = _find_provider(request, provider=run.provider, model=run.model)
+    try:
+        preview = await preview_evaluation_run(
+            database,
+            dataset_name=str(run.configuration.get("dataset_name", "")),
+            dataset_version=str(run.configuration.get("dataset_version", "")),
+            provider=provider,
+        )
+        approved_ceiling = Decimal(
+            str(run.configuration.get("approved_max_cost_usd", "0"))
+        )
+        if preview.estimated_max_cost_usd > approved_ceiling:
+            raise GatewayError(
+                "The current evaluation estimate exceeds the approved cost ceiling.",
+                code="evaluation_cost_ceiling_exceeded",
+                status_code=status.HTTP_409_CONFLICT,
+            )
+        await append_audit_event(
+            database,
+            principal=identity.principal,
+            action="evaluation_run.execution_requested",
+            resource_type="evaluation_run",
+            resource_id=str(run_id),
+            event_data={
+                "provider": run.provider,
+                "model": run.model,
+                "current_estimated_max_cost_usd": str(
+                    preview.estimated_max_cost_usd
+                ),
+                "approved_max_cost_usd": str(approved_ceiling),
+            },
+        )
+        await database.commit()
+        summary = await DatabaseEvaluationService(
+            database, request.app.state.resources.providers
+        ).execute(run_id)
+        await append_audit_event(
+            database,
+            principal=identity.principal,
+            action="evaluation_run.completed",
+            resource_type="evaluation_run",
+            resource_id=str(run_id),
+            event_data={
+                "provider": run.provider,
+                "model": run.model,
+                "completed_cases": summary.completed_cases,
+                "failed_cases": summary.failed_cases,
+                "total_cost_usd": str(summary.total_cost_usd),
+            },
+        )
+        await database.commit()
+    except GatewayError:
+        await database.rollback()
+        raise
+    except EvaluationRunError as exc:
+        await database.rollback()
+        error_status = (
+            status.HTTP_404_NOT_FOUND
+            if exc.code == "run_not_found"
+            else status.HTTP_409_CONFLICT
+        )
+        raise GatewayError(str(exc), code=exc.code, status_code=error_status) from exc
+    except (ValueError, TypeError) as exc:
+        await database.rollback()
+        raise _evaluation_error(exc) from exc
+    except Exception:
+        await database.rollback()
+        raise
+    return EvaluationExecutionResponse(**asdict(summary))
+
+
+@router.post(
+    "/evaluations/runs/{run_id}/scores",
+    response_model=PublishEvaluationScoresResponse,
+    status_code=status.HTTP_201_CREATED,
+    operation_id="publishAdminEvaluationScores",
+)
+async def publish_admin_evaluation_scores(
+    run_id: UUID,
+    payload: PublishEvaluationScoresRequest,
+    identity: Annotated[BrowserIdentity, Depends(require_portal_csrf)],
+    database: Annotated[AsyncSession, Depends(get_database_session)],
+) -> PublishEvaluationScoresResponse:
+    _require_platform_operator(identity)
+    try:
+        summary = await create_candidate_scores(
+            database, run_id=run_id, score_version=payload.score_version
+        )
+        await append_audit_event(
+            database,
+            principal=identity.principal,
+            action="evaluation_scores.published",
+            resource_type="evaluation_run",
+            resource_id=str(run_id),
+            event_data={
+                "score_version": summary.score_version,
+                "score_count": summary.score_count,
+                "sample_count": summary.sample_count,
+            },
+        )
+        await database.commit()
+    except (ValueError, TypeError) as exc:
+        await database.rollback()
+        raise _evaluation_error(exc) from exc
+    except Exception:
+        await database.rollback()
+        raise
+    return PublishEvaluationScoresResponse(**asdict(summary))
+
+
 @router.get(
     "/evaluations/scores",
     response_model=ScoreVersionListResponse,
@@ -236,6 +549,107 @@ async def list_admin_score_versions(
             for item in scores
         ]
     )
+
+
+@router.get(
+    "/evaluations/scores/compare",
+    response_model=ScoreComparisonResponse,
+    operation_id="compareAdminScoreVersion",
+)
+async def compare_admin_score_version(
+    provider: Annotated[str, Query(min_length=1, max_length=64)],
+    model: Annotated[str, Query(min_length=1, max_length=128)],
+    score_version: Annotated[str, Query(min_length=1, max_length=64)],
+    identity: Annotated[BrowserIdentity, Depends(authenticate_portal_session)],
+    database: Annotated[AsyncSession, Depends(get_database_session)],
+) -> ScoreComparisonResponse:
+    _require_platform_operator(identity)
+    try:
+        comparison = await compare_score_version(
+            database,
+            provider=provider,
+            model=model,
+            candidate_version=score_version,
+        )
+    except ScoreActivationError as exc:
+        raise GatewayError(
+            str(exc),
+            code=exc.code,
+            status_code=status.HTTP_409_CONFLICT,
+        ) from exc
+    return ScoreComparisonResponse(
+        provider=comparison.provider,
+        model=comparison.model,
+        candidate_version=comparison.candidate_version,
+        candidate_status=comparison.candidate_status,
+        active_version=comparison.active_version,
+        rows=[
+            ScoreComparisonRowResponse(
+                task_category=row.task_category,
+                difficulty=row.difficulty,
+                candidate_quality=row.candidate_quality,
+                active_quality=row.active_quality,
+                quality_delta=row.quality_delta,
+                candidate_samples=row.candidate_samples,
+                candidate_variance=row.candidate_variance,
+                capabilities=list(row.capabilities),
+            )
+            for row in comparison.rows
+        ],
+    )
+
+
+@router.post(
+    "/evaluations/scores/activation",
+    response_model=ScoreActivationResponse,
+    operation_id="changeAdminScoreActivation",
+)
+async def change_admin_score_activation(
+    payload: ChangeScoreActivationRequest,
+    identity: Annotated[BrowserIdentity, Depends(require_portal_csrf)],
+    database: Annotated[AsyncSession, Depends(get_database_session)],
+) -> ScoreActivationResponse:
+    _require_platform_operator(identity)
+    try:
+        result = await change_active_score_set(
+            database,
+            provider=payload.provider,
+            model=payload.model,
+            score_version=payload.score_version,
+            action=payload.action,
+            actor=str(identity.authentication.user.id),
+            reason=payload.reason,
+            valid_days=payload.valid_days,
+            minimum_samples=payload.minimum_samples,
+        )
+        await append_audit_event(
+            database,
+            principal=identity.principal,
+            action=f"score_set.{payload.action}",
+            resource_type="model_capability_score",
+            resource_id=f"{result.provider}/{result.model}/{result.score_version}",
+            event_data={
+                "provider": result.provider,
+                "model": result.model,
+                "score_version": result.score_version,
+                "previous_score_version": result.previous_score_version,
+                "action": result.action,
+                "reason": payload.reason,
+                "valid_until": result.valid_until.isoformat(),
+            },
+        )
+        await database.commit()
+    except ScoreActivationError as exc:
+        await database.rollback()
+        raise GatewayError(
+            str(exc),
+            code=exc.code,
+            status_code=status.HTTP_409_CONFLICT,
+        ) from exc
+    except Exception:
+        await database.rollback()
+        raise
+    return ScoreActivationResponse(**asdict(result))
 
 
 @router.post(

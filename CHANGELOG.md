@@ -14,6 +14,10 @@ All notable changes to this project are documented in this file.
   proposals remain deployment inputs rather than silently changing live costs.
 - A privacy-safe platform evaluation console for run history, failure metadata,
   and side-by-side score-version summaries without exposing prompts or outputs.
+- A guarded evaluation lifecycle in the operator portal: no-call cost
+  preflights, explicit cost ceilings and execution confirmation, immutable
+  draft-score publication, active-score comparisons, audited activation, and
+  rollback.
 - Version 3 customer-portal MVP completion: owner-managed service accounts with
   one-time workload credentials and cascading revocation, visible monthly
   budget-threshold alerts, and atomic gateway API-key rotation.

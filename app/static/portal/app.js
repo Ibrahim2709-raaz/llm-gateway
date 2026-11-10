@@ -8,6 +8,8 @@ const state = {
   usage: null,
   preference: "balanced",
   adminModels: [],
+  adminEvaluationDatasets: [],
+  adminEvaluationModels: [],
 };
 
 const $ = (selector, root = document) => root.querySelector(selector);
@@ -199,23 +201,33 @@ async function loadPage(name) {
 
 async function loadAdminEvaluations() {
   if (state.account?.platform_role !== "platform_operator") return;
-  const [runs, scores] = await Promise.all([
+  const [runs, scores, datasets, catalog] = await Promise.all([
     api("/v1/portal/admin/evaluations/runs?limit=100"),
     api("/v1/portal/admin/evaluations/scores"),
+    api("/v1/portal/admin/evaluations/datasets"),
+    api("/v1/portal/admin/models"),
   ]);
+  state.adminEvaluationDatasets = datasets.data;
+  state.adminEvaluationModels = catalog.data.filter((model) => model.availability === "available");
   $("#evaluation-run-count").textContent = formatNumber(runs.data.length);
   $("#evaluation-completed-count").textContent = formatNumber(runs.data.filter((run) => run.status === "completed").length);
   $("#evaluation-failure-count").textContent = formatNumber(runs.data.reduce((total, run) => total + run.failed_case_count, 0));
   $("#score-version-count").textContent = formatNumber(scores.data.length);
   $("#evaluation-runs-table").innerHTML = runs.data.map((run) => {
     const statusClass = run.status === "completed" ? "success" : run.status === "failed" ? "danger" : run.status === "running" ? "warning" : "neutral";
-    const review = run.failed_case_count > 0 ? `<button class="text-button review-evaluation-failures" data-run-id="${escapeHtml(run.id)}" data-run-label="${escapeHtml(`${run.provider} / ${run.model}`)}">Review</button>` : "";
-    return `<tr><td><strong>${escapeHtml(run.dataset_name)}</strong><br><code>${escapeHtml(run.dataset_version)}</code></td><td>${escapeHtml(titleCase(run.provider))}<br><code>${escapeHtml(run.model)}</code></td><td><span class="status-badge ${statusClass}">${escapeHtml(titleCase(run.status))}</span></td><td>${formatNumber(run.case_count)}</td><td>${formatNumber(run.failed_case_count)}</td><td>${run.average_score === null ? "—" : `${Math.round(Number(run.average_score) * 100)} / 100`}</td><td>${formatMoney(run.total_cost_usd)}</td><td>${run.completed_at ? formatDate(run.completed_at) : "—"}</td><td>${review}</td></tr>`;
+    const actions = [
+      run.status === "pending" ? `<button class="text-button execute-evaluation" data-run-id="${escapeHtml(run.id)}" data-run-label="${escapeHtml(`${run.provider} / ${run.model}`)}">Run</button>` : "",
+      run.status === "completed" ? `<button class="text-button publish-evaluation-scores" data-run-id="${escapeHtml(run.id)}">Publish scores</button>` : "",
+      run.failed_case_count > 0 ? `<button class="text-button review-evaluation-failures" data-run-id="${escapeHtml(run.id)}" data-run-label="${escapeHtml(`${run.provider} / ${run.model}`)}">Failures</button>` : "",
+    ].filter(Boolean).join(" ");
+    return `<tr><td><strong>${escapeHtml(run.dataset_name)}</strong><br><code>${escapeHtml(run.dataset_version)}</code></td><td>${escapeHtml(titleCase(run.provider))}<br><code>${escapeHtml(run.model)}</code></td><td><span class="status-badge ${statusClass}">${escapeHtml(titleCase(run.status))}</span></td><td>${formatNumber(run.case_count)}</td><td>${formatNumber(run.failed_case_count)}</td><td>${run.average_score === null ? "—" : `${Math.round(Number(run.average_score) * 100)} / 100`}</td><td>${formatMoney(run.total_cost_usd)}</td><td>${run.completed_at ? formatDate(run.completed_at) : "—"}</td><td>${actions}</td></tr>`;
   }).join("") || '<tr><td colspan="9" class="empty-state">No evaluation runs yet. Use the operator CLI to create and execute one.</td></tr>';
   $("#score-versions-table").innerHTML = scores.data.map((score) => {
     const statusClass = score.status === "active" ? "success" : score.status === "draft" ? "warning" : "neutral";
-    return `<tr><td><strong>${escapeHtml(titleCase(score.provider))}</strong><br><code>${escapeHtml(score.model)}</code></td><td><code>${escapeHtml(score.score_version)}</code></td><td><span class="status-badge ${statusClass}">${escapeHtml(titleCase(score.status))}</span></td><td>${Math.round(Number(score.weighted_quality_score) * 100)} / 100</td><td>${formatNumber(score.sample_count)}</td><td>${formatNumber(score.score_count)}</td><td>${score.task_categories.map((item) => escapeHtml(titleCase(item))).join(", ")}</td><td>${score.valid_until ? formatDate(score.valid_until) : "Not active"}</td></tr>`;
-  }).join("") || '<tr><td colspan="8" class="empty-state">No score versions have been generated.</td></tr>';
+    const action = score.status === "draft" ? "activate" : score.status === "retired" ? "rollback" : "";
+    const controls = `<button class="text-button compare-score-version" data-provider="${escapeHtml(score.provider)}" data-model="${escapeHtml(score.model)}" data-version="${escapeHtml(score.score_version)}">Compare</button>${action ? ` <button class="text-button change-score-activation" data-provider="${escapeHtml(score.provider)}" data-model="${escapeHtml(score.model)}" data-version="${escapeHtml(score.score_version)}" data-action="${action}">${escapeHtml(titleCase(action))}</button>` : ""}`;
+    return `<tr><td><strong>${escapeHtml(titleCase(score.provider))}</strong><br><code>${escapeHtml(score.model)}</code></td><td><code>${escapeHtml(score.score_version)}</code></td><td><span class="status-badge ${statusClass}">${escapeHtml(titleCase(score.status))}</span></td><td>${Math.round(Number(score.weighted_quality_score) * 100)} / 100</td><td>${formatNumber(score.sample_count)}</td><td>${formatNumber(score.score_count)}</td><td>${score.task_categories.map((item) => escapeHtml(titleCase(item))).join(", ")}</td><td>${score.valid_until ? formatDate(score.valid_until) : "Not active"}</td><td>${controls}</td></tr>`;
+  }).join("") || '<tr><td colspan="9" class="empty-state">No score versions have been generated.</td></tr>';
 }
 
 async function loadEvaluationFailures(runId, label) {
@@ -223,6 +235,84 @@ async function loadEvaluationFailures(runId, label) {
   $("#evaluation-failures-card").classList.remove("hidden");
   $("#evaluation-failures-title").textContent = `Failed cases · ${label}`;
   $("#evaluation-failures-table").innerHTML = payload.data.map((failure) => `<tr><td><code>${escapeHtml(failure.case_external_id)}</code></td><td>${escapeHtml(titleCase(failure.task_category))} · ${escapeHtml(titleCase(failure.difficulty))}</td><td>${escapeHtml(titleCase(failure.outcome))}</td><td>${failure.score === null ? "—" : `${Math.round(Number(failure.score) * 100)} / 100`}</td><td>${escapeHtml(failure.error_code || "—")}</td><td>${formatNumber(failure.prompt_tokens + failure.completion_tokens)}</td><td>${formatMoney(failure.cost_usd)}</td><td>${formatNumber(failure.latency_ms)} ms</td></tr>`).join("") || '<tr><td colspan="8" class="empty-state">No failed or zero-score cases were found.</td></tr>';
+}
+
+function openEvaluationDialog() {
+  const datasets = state.adminEvaluationDatasets.map((dataset, index) => `<option value="${index}">${escapeHtml(dataset.name)} / ${escapeHtml(dataset.version)} · ${formatNumber(dataset.case_count)} cases</option>`).join("");
+  const models = state.adminEvaluationModels.map((model, index) => `<option value="${index}">${escapeHtml(titleCase(model.provider))} / ${escapeHtml(model.model)}</option>`).join("");
+  if (!datasets || !models) { toast("An active dataset and available model are required.", true); return; }
+  openDialog({ eyebrow: "GUARDED EVALUATION", title: "Create an evaluation run", content: `<form id="evaluation-create-form"><label>Dataset<select name="dataset_index">${datasets}</select></label><label>Provider / model<select name="model_index">${models}</select></label><div id="evaluation-preflight" class="preview-card"><p class="muted">Preview the maximum token cost before creating the run. No provider call happens during preview.</p></div><button class="button primary" type="submit">Preview cost</button></form>` });
+  const form = $("#evaluation-create-form");
+  const clearPreview = () => { delete form.dataset.preflight; $("button[type='submit']", form).textContent = "Preview cost"; };
+  $$('select', form).forEach((select) => select.addEventListener("change", clearPreview));
+  form.addEventListener("submit", async (event) => {
+    event.preventDefault(); setBusy(form, true);
+    try {
+      const dataset = state.adminEvaluationDatasets[Number(form.elements.dataset_index.value)];
+      const model = state.adminEvaluationModels[Number(form.elements.model_index.value)];
+      const selection = { dataset_name: dataset.name, dataset_version: dataset.version, provider: model.provider, model: model.model };
+      if (!form.dataset.preflight) {
+        const preview = await api("/v1/portal/admin/evaluations/preflight", { method: "POST", body: selection });
+        form.dataset.preflight = JSON.stringify(preview);
+        $("#evaluation-preflight").innerHTML = `<p class="eyebrow">MAXIMUM ESTIMATE</p><strong>${formatMoney(preview.estimated_max_cost_usd)}</strong><p class="muted">${formatNumber(preview.case_count)} cases · up to ${formatNumber(preview.estimated_input_tokens + preview.maximum_output_tokens)} tokens${preview.paid_provider ? " · paid provider" : " · free provider"}</p><p class="muted">Creating this run does not call the provider. Execution remains a separate confirmation.</p>`;
+        $("button[type='submit']", form).textContent = "Create pending run";
+      } else {
+        const preview = JSON.parse(form.dataset.preflight);
+        await api("/v1/portal/admin/evaluations/runs", { method: "POST", body: { ...selection, approved_max_cost_usd: preview.estimated_max_cost_usd, confirmation: "CREATE_EVALUATION" } });
+        $("#form-dialog").close(); toast("Pending evaluation created. Review it before running."); await loadAdminEvaluations();
+      }
+    } catch (error) { toast(error.message, true); clearPreview(); }
+    finally { setBusy(form, false); }
+  });
+}
+
+function openEvaluationExecutionDialog(runId, label) {
+  openDialog({ eyebrow: "PAID ACTION", title: `Run ${label}`, content: `<form id="evaluation-execute-form"><p>This calls the configured provider for every unfinished case. The run will stop before starting if current prices exceed its approved ceiling.</p><label class="confirmation-check"><input name="confirmed" type="checkbox" required> I understand this may consume paid provider tokens.</label><button class="button danger" type="submit">Run evaluation</button></form>` });
+  const form = $("#evaluation-execute-form");
+  form.addEventListener("submit", async (event) => {
+    event.preventDefault(); setBusy(form, true);
+    try {
+      const result = await api(`/v1/portal/admin/evaluations/runs/${runId}/execute`, { method: "POST", body: { confirmation: "RUN_EVALUATION" } });
+      $("#form-dialog").close(); toast(`Evaluation completed: ${result.completed_cases} cases, ${formatMoney(result.total_cost_usd)}.`); await loadAdminEvaluations();
+    } catch (error) { toast(error.message, true); }
+    finally { setBusy(form, false); }
+  });
+}
+
+function openScorePublishDialog(runId) {
+  openDialog({ eyebrow: "VERSIONED EVIDENCE", title: "Publish draft scores", content: `<form id="score-publish-form"><label>Score version<input name="score_version" maxlength="64" placeholder="scores-2026-11" required></label><p class="muted preview-note">Only complete runs without failed cases can produce an immutable draft score version.</p><button class="button primary" type="submit">Publish draft</button></form>` });
+  const form = $("#score-publish-form");
+  form.addEventListener("submit", async (event) => {
+    event.preventDefault(); setBusy(form, true);
+    try {
+      const score_version = String(new FormData(form).get("score_version") || "").trim();
+      await api(`/v1/portal/admin/evaluations/runs/${runId}/scores`, { method: "POST", body: { score_version } });
+      $("#form-dialog").close(); toast("Draft score version published."); await loadAdminEvaluations();
+    } catch (error) { toast(error.message, true); }
+    finally { setBusy(form, false); }
+  });
+}
+
+async function openScoreComparisonDialog(provider, model, version) {
+  const query = new URLSearchParams({ provider, model, score_version: version });
+  const comparison = await api(`/v1/portal/admin/evaluations/scores/compare?${query}`);
+  const rows = comparison.rows.map((row) => `<tr><td>${escapeHtml(titleCase(row.task_category))} · ${escapeHtml(titleCase(row.difficulty))}</td><td>${Math.round(Number(row.candidate_quality) * 100)} / 100</td><td>${row.active_quality === null ? "—" : `${Math.round(Number(row.active_quality) * 100)} / 100`}</td><td>${row.quality_delta === null ? "—" : `${Number(row.quality_delta) >= 0 ? "+" : ""}${Math.round(Number(row.quality_delta) * 100)} points`}</td><td>${formatNumber(row.candidate_samples)}</td></tr>`).join("");
+  openDialog({ eyebrow: "EVIDENCE COMPARISON", title: `${provider} / ${model} · ${version}`, content: `<p class="muted">Active baseline: <code>${escapeHtml(comparison.active_version || "none")}</code></p><div class="table-wrap"><table><thead><tr><th>Task</th><th>Candidate</th><th>Active</th><th>Delta</th><th>Samples</th></tr></thead><tbody>${rows}</tbody></table></div>` });
+}
+
+function openScoreActivationDialog(provider, model, version, action) {
+  openDialog({ eyebrow: "ROUTING EVIDENCE CHANGE", title: `${titleCase(action)} ${version}`, content: `<form id="score-activation-form"><p>This changes the quality evidence eligible for routing for <strong>${escapeHtml(provider)} / ${escapeHtml(model)}</strong>.</p><label>Reason<textarea name="reason" rows="4" minlength="3" maxlength="500" required placeholder="Record the evidence and operational reason."></textarea></label><label>Validity days<input name="valid_days" type="number" min="1" max="365" value="30" required></label><label class="confirmation-check"><input name="confirmed" type="checkbox" required> I reviewed the score comparison and understand the routing impact.</label><button class="button ${action === "rollback" ? "danger" : "primary"}" type="submit">${escapeHtml(titleCase(action))} score set</button></form>` });
+  const form = $("#score-activation-form");
+  form.addEventListener("submit", async (event) => {
+    event.preventDefault(); setBusy(form, true);
+    try {
+      const values = new FormData(form);
+      await api("/v1/portal/admin/evaluations/scores/activation", { method: "POST", body: { provider, model, score_version: version, action, reason: values.get("reason"), valid_days: Number(values.get("valid_days")), minimum_samples: 5, confirmation: "CHANGE_SCORE_SET" } });
+      const verb = action === "rollback" ? "rolled back" : "activated";
+      $("#form-dialog").close(); toast(`Score set ${verb}.`); await loadAdminEvaluations();
+    } catch (error) { toast(error.message, true); }
+    finally { setBusy(form, false); }
+  });
 }
 
 async function loadAdminModels() {
@@ -561,14 +651,25 @@ function bindEvents() {
   $("#new-key-button").addEventListener("click", openCreateKeyDialog);
   $("#new-service-account-button").addEventListener("click", openCreateServiceAccountDialog);
   $("#new-pricing-proposal-button").addEventListener("click", openPricingProposalDialog);
+  $("#new-evaluation-button").addEventListener("click", openEvaluationDialog);
   $("#invite-button").addEventListener("click", openInviteDialog);
   $("#pricing-proposals-table").addEventListener("click", (event) => {
     const button = event.target.closest(".review-pricing");
     if (button) openPricingReviewDialog(button.dataset.proposalId, button.dataset.decision);
   });
   $("#evaluation-runs-table").addEventListener("click", (event) => {
-    const button = event.target.closest(".review-evaluation-failures");
-    if (button) loadEvaluationFailures(button.dataset.runId, button.dataset.runLabel).catch((error) => toast(error.message, true));
+    const execute = event.target.closest(".execute-evaluation");
+    if (execute) { openEvaluationExecutionDialog(execute.dataset.runId, execute.dataset.runLabel); return; }
+    const publish = event.target.closest(".publish-evaluation-scores");
+    if (publish) { openScorePublishDialog(publish.dataset.runId); return; }
+    const failures = event.target.closest(".review-evaluation-failures");
+    if (failures) loadEvaluationFailures(failures.dataset.runId, failures.dataset.runLabel).catch((error) => toast(error.message, true));
+  });
+  $("#score-versions-table").addEventListener("click", (event) => {
+    const compare = event.target.closest(".compare-score-version");
+    if (compare) { openScoreComparisonDialog(compare.dataset.provider, compare.dataset.model, compare.dataset.version).catch((error) => toast(error.message, true)); return; }
+    const activation = event.target.closest(".change-score-activation");
+    if (activation) openScoreActivationDialog(activation.dataset.provider, activation.dataset.model, activation.dataset.version, activation.dataset.action);
   });
   $("#keys-table").addEventListener("click", async (event) => {
     const rotateButton = event.target.closest(".rotate-key");

@@ -1,6 +1,7 @@
 from collections import defaultdict
 from dataclasses import dataclass
 from decimal import Decimal
+from math import ceil
 from uuid import UUID, uuid4
 
 from sqlalchemy import func, select
@@ -14,6 +15,8 @@ from app.db.models import (
     ModelCapabilityScore,
 )
 from app.evaluations.service import RUNNER_VERSION
+from app.providers.base import ChatProvider
+from app.schemas.chat import ChatCompletionRequest
 
 SMOKE_DATASET_NAME = "evaluation-smoke"
 SMOKE_DATASET_VERSION = "1.0.0"
@@ -45,6 +48,108 @@ class CandidateScoreSummary:
     score_version: str
     score_count: int
     sample_count: int
+
+
+@dataclass(frozen=True, slots=True)
+class EvaluationDatasetSummary:
+    name: str
+    version: str
+    description: str
+    case_count: int
+
+
+@dataclass(frozen=True, slots=True)
+class EvaluationRunPreflight:
+    dataset_name: str
+    dataset_version: str
+    provider: str
+    model: str
+    case_count: int
+    estimated_input_tokens: int
+    maximum_output_tokens: int
+    estimated_max_cost_usd: Decimal
+    paid_provider: bool
+
+
+async def list_evaluation_datasets(
+    session: AsyncSession,
+) -> tuple[EvaluationDatasetSummary, ...]:
+    rows = (
+        await session.execute(
+            select(EvaluationDataset, func.count(EvaluationCase.id))
+            .outerjoin(EvaluationCase, EvaluationCase.dataset_id == EvaluationDataset.id)
+            .where(EvaluationDataset.status == "active")
+            .group_by(EvaluationDataset.id)
+            .order_by(EvaluationDataset.name, EvaluationDataset.version)
+        )
+    ).all()
+    return tuple(
+        EvaluationDatasetSummary(
+            name=dataset.name,
+            version=dataset.version,
+            description=dataset.description,
+            case_count=int(case_count),
+        )
+        for dataset, case_count in rows
+    )
+
+
+async def preview_evaluation_run(
+    session: AsyncSession,
+    *,
+    dataset_name: str,
+    dataset_version: str,
+    provider: ChatProvider,
+) -> EvaluationRunPreflight:
+    dataset = await session.scalar(
+        select(EvaluationDataset).where(
+            EvaluationDataset.name == dataset_name,
+            EvaluationDataset.version == dataset_version,
+            EvaluationDataset.status == "active",
+        )
+    )
+    if dataset is None:
+        raise ValueError(
+            f"Active evaluation dataset '{dataset_name}/{dataset_version}' was not found"
+        )
+    cases = list(
+        (
+            await session.scalars(
+                select(EvaluationCase)
+                .where(EvaluationCase.dataset_id == dataset.id)
+                .order_by(EvaluationCase.external_id)
+            )
+        ).all()
+    )
+    if not cases:
+        raise ValueError("Evaluation dataset contains no cases")
+
+    estimated_input_tokens = 0
+    maximum_output_tokens = 0
+    for case in cases:
+        request = ChatCompletionRequest.model_validate(case.prompt)
+        prompt_text = "\n".join(
+            f"{message.role}: {message.content}" for message in request.messages
+        )
+        estimated_input_tokens += max(1, ceil(len(prompt_text) / 4))
+        maximum_output_tokens += request.max_tokens
+
+    profile = provider.routing_profile
+    maximum_cost = (
+        Decimal(estimated_input_tokens) * profile.input_cost_per_million_usd
+        + Decimal(maximum_output_tokens) * profile.output_cost_per_million_usd
+    ) / Decimal(1_000_000)
+    return EvaluationRunPreflight(
+        dataset_name=dataset.name,
+        dataset_version=dataset.version,
+        provider=provider.name,
+        model=provider.model,
+        case_count=len(cases),
+        estimated_input_tokens=estimated_input_tokens,
+        maximum_output_tokens=maximum_output_tokens,
+        estimated_max_cost_usd=maximum_cost.quantize(Decimal("0.00000001")),
+        paid_provider=maximum_cost > 0,
+    )
 
 
 async def seed_smoke_evaluation_dataset(

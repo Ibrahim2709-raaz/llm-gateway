@@ -97,9 +97,9 @@ semantic status colors.
 ## Milestone 3: Administrator routing control plane
 
 Status: in progress. The model catalog, independently reviewed pricing
-proposals, and privacy-safe evaluation inspection console are implemented.
-Launching paid evaluation jobs and live pricing activation remain separate,
-explicitly guarded checkpoints.
+proposals, privacy-safe evaluation inspection, cost-capped run launch, draft
+score publication, comparison, activation, and rollback are implemented.
+Policy and rollout controls plus the consolidated operational summary remain.
 
 ### Work
 
