@@ -11,8 +11,9 @@ messages, choices, and token usage. Gateway-specific request controls use the
 object. Clients that ignore unknown response fields can continue using the
 standard completion fields.
 
-The MVP supports non-streaming text completions only. A request with
-`stream: true` receives a validation error.
+The endpoint supports non-streaming text, JSON, JSON Schema, and function-tool
+declarations. A request with `stream: true` still receives a validation error;
+server-sent streaming and cancellation are the next Milestone 4 protocol step.
 
 ## Authentication
 
@@ -153,6 +154,7 @@ Authorization: Bearer gw_live_example
   "temperature": 0.2,
   "max_tokens": 400,
   "stream": false,
+  "response_format": {"type": "text"},
   "routing": {
     "strategy": "balanced",
     "allowed_providers": ["openai", "anthropic", "local"],
@@ -175,6 +177,13 @@ Authorization: Bearer gw_live_example
 - `max_tokens` is between `1` and `32768`, subject to the selected model's
   context limit.
 - `stream` must be `false` in the MVP.
+- `response_format` accepts `text`, `json_object`, or `json_schema`. A JSON
+  Schema request includes a stable name, schema object, and optional strict and
+  description fields.
+- `tools` accepts OpenAI-compatible function declarations. `tool_choice` may be
+  `none`, `auto`, `required`, or a declared function name. Duplicate functions,
+  undeclared named choices, and a required choice without tools are rejected
+  before routing.
 - `allowed_providers` can only reduce the customer's permitted providers.
 - `max_cost_usd` is a hard limit. The router removes candidates whose estimated
   cost exceeds it.
@@ -182,10 +191,20 @@ Authorization: Bearer gw_live_example
 
 For `model: "auto"`, the gateway classifies the task as `simple`, `medium`, or
 `complex`. It removes candidates that violate provider allowlists, task
-capability, or the maximum estimated request cost. The selected strategy then
+capability, required structured-output or tool-use support, or the maximum
+estimated request cost. These feature requirements are hard filters for both
+automatic and explicit models, so an unsupported request fails before an
+upstream call. The selected strategy then
 optimizes estimated price (`cost`), typical response time (`latency`), model
 capability (`quality`), or a complexity-aware weighted score (`balanced`). An
 explicit model bypasses ranking but still respects allowlists and cost limits.
+
+OpenAI and Anthropic adapters translate structured-output and function-tool
+declarations to their native SDK contracts. OpenAI-compatible local adapters
+translate the same fields when the configured model profile declares those
+capabilities. Function results use the standard assistant `tool_calls` shape
+and `finish_reason: "tool_calls"`; provider-specific identifiers and arguments
+are normalized without exposing credentials or internal errors.
 
 ### Retries and fallback
 

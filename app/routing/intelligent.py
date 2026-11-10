@@ -5,6 +5,7 @@ from typing import Literal
 
 from app.db.models import ModelCapabilityScore, RoutingPolicyVersion
 from app.providers.base import ChatProvider
+from app.routing.capabilities import required_capabilities
 from app.routing.classifier import TaskClassification, estimate_prompt_tokens
 from app.routing.evidence import evaluate_cold_start, evaluate_score_evidence
 from app.schemas.chat import ChatCompletionRequest
@@ -46,9 +47,7 @@ class EvidenceRoutingPlan:
     required_capabilities: frozenset[str]
 
 
-def estimate_candidate_cost(
-    request: ChatCompletionRequest, provider: ChatProvider
-) -> Decimal:
+def estimate_candidate_cost(request: ChatCompletionRequest, provider: ChatProvider) -> Decimal:
     profile = provider.routing_profile
     input_cost = Decimal(estimate_prompt_tokens(request)) * profile.input_cost_per_million_usd
     output_cost = Decimal(request.max_tokens) * profile.output_cost_per_million_usd
@@ -75,7 +74,7 @@ class EvidenceDrivenRouter:
         operational_stats: dict[tuple[str, str], OperationalModelStats] | None = None,
     ) -> EvidenceRoutingPlan:
         stats = operational_stats or {}
-        required_capabilities = self._required_capabilities(request)
+        required = required_capabilities(request)
         explicit = request.model != "auto"
         candidates: list[EvidenceRoutingCandidate] = []
         for provider in self.providers:
@@ -85,6 +84,8 @@ class EvidenceDrivenRouter:
                 request.routing.allowed_providers is not None
                 and provider.name not in request.routing.allowed_providers
             ):
+                continue
+            if not required.issubset(provider.routing_profile.capabilities):
                 continue
             live = stats.get((provider.name, provider.model), OperationalModelStats())
             if not live.available:
@@ -101,7 +102,7 @@ class EvidenceDrivenRouter:
                 eligibility = evaluate_score_evidence(
                     score,
                     policy,
-                    required_capabilities=required_capabilities,
+                    required_capabilities=required,
                     now=self.now,
                 )
             else:
@@ -111,6 +112,10 @@ class EvidenceDrivenRouter:
                 score_version = score.score_version
                 reason_codes.append("evaluated_quality")
             else:
+                # A measured capability mismatch is a hard exclusion, not a
+                # missing-evidence condition that may use a static fallback.
+                if eligibility is not None and eligibility.reason == "missing_capability":
+                    continue
                 cold_start = evaluate_cold_start(policy, explicit_model=explicit)
                 if not cold_start.eligible:
                     continue
@@ -160,7 +165,7 @@ class EvidenceDrivenRouter:
             policy_version=policy.version,
             score_version=policy.score_version,
             classification=classification,
-            required_capabilities=required_capabilities,
+            required_capabilities=required,
         )
 
     @staticmethod
@@ -178,22 +183,11 @@ class EvidenceDrivenRouter:
             and score.difficulty == classification.difficulty.value
         ]
         if len(matches) > 1:
-            raise ValueError(
-                f"Multiple capability scores match {provider.name}/{provider.model}"
-            )
+            raise ValueError(f"Multiple capability scores match {provider.name}/{provider.model}")
         return matches[0] if matches else None
 
     @staticmethod
-    def _required_capabilities(request: ChatCompletionRequest) -> frozenset[str]:
-        capabilities = {"text_generation"}
-        if any(message.role == "tool" for message in request.messages):
-            capabilities.add("tool_use")
-        return frozenset(capabilities)
-
-    @staticmethod
-    def _quality_floor(
-        policy: RoutingPolicyVersion, classification: TaskClassification
-    ) -> float:
+    def _quality_floor(policy: RoutingPolicyVersion, classification: TaskClassification) -> float:
         category_floor = policy.minimum_quality.get(classification.category.value, 0)
         if isinstance(category_floor, dict):
             value = category_floor.get(classification.difficulty.value, 0)
@@ -227,10 +221,7 @@ class EvidenceDrivenRouter:
             "reliability": 0.1,
         }
         configured = policy.strategy_weights.get(classification.difficulty.value, {})
-        weights = {
-            key: float(configured.get(key, value))
-            for key, value in defaults.items()
-        }
+        weights = {key: float(configured.get(key, value)) for key, value in defaults.items()}
         if any(value < 0 for value in weights.values()):
             raise ValueError("Routing policy strategy weights must not be negative")
         total = sum(weights.values())

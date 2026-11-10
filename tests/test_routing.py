@@ -20,6 +20,7 @@ class ProfiledProvider:
         quality: float,
         max_complexity: str = "complex",
         auto_selectable: bool = True,
+        capabilities: frozenset[str] = frozenset({"text_generation"}),
     ) -> None:
         self.name = name
         self.model = f"{name}-1"
@@ -30,6 +31,7 @@ class ProfiledProvider:
             quality_score=quality,
             max_complexity=max_complexity,  # type: ignore[arg-type]
             auto_selectable=auto_selectable,
+            capabilities=capabilities,
         )
 
     async def complete(self, request: ChatCompletionRequest) -> ProviderResult:
@@ -133,6 +135,51 @@ def test_complexity_capability_removes_ineligible_models() -> None:
 
     assert decision.task_complexity == "complex"
     assert decision.provider.name == "fast"
+
+
+def test_declared_tool_requirement_removes_text_only_models() -> None:
+    text_only = make_providers()[0]
+    tool_capable = ProfiledProvider(
+        "tool",
+        input_cost="2",
+        output_cost="2",
+        latency_ms=200,
+        quality=0.7,
+        capabilities=frozenset({"text_generation", "tool_use"}),
+    )
+    request = ChatCompletionRequest.model_validate(
+        {
+            **make_request(strategy="cost").model_dump(),
+            "tools": [
+                {
+                    "type": "function",
+                    "function": {
+                        "name": "lookup_weather",
+                        "parameters": {"type": "object"},
+                    },
+                }
+            ],
+        }
+    )
+
+    decision = ProviderRouter((text_only, tool_capable)).route(request)  # type: ignore[arg-type]
+
+    assert decision.provider is tool_capable
+
+
+def test_capability_rejection_identifies_structured_output() -> None:
+    router = ProviderRouter(make_providers())  # type: ignore[arg-type]
+    request = ChatCompletionRequest.model_validate(
+        {
+            **make_request().model_dump(),
+            "response_format": {"type": "json_object"},
+        }
+    )
+
+    with pytest.raises(GatewayError) as error:
+        router.route(request)
+
+    assert error.value.param == "response_format"
 
 
 def test_cost_limit_removes_expensive_candidates() -> None:

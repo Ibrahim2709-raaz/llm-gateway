@@ -5,6 +5,7 @@ from fastapi import status
 
 from app.core.errors import GatewayError
 from app.providers.base import ChatProvider, ModelRoutingProfile, TaskComplexity
+from app.routing.capabilities import required_capabilities
 from app.routing.classifier import TaskClassification, classify_request, estimate_prompt_tokens
 from app.schemas.chat import ChatCompletionRequest
 
@@ -132,6 +133,8 @@ class ProviderRouter:
             return False
         if request.model != "auto" and provider.model != request.model:
             return False
+        if not required_capabilities(request).issubset(provider.routing_profile.capabilities):
+            return False
         return not (
             request.model == "auto"
             and COMPLEXITY_LEVEL[provider.routing_profile.max_complexity]
@@ -192,6 +195,15 @@ class ProviderRouter:
 
     def _rejection_param(self, request: ChatCompletionRequest) -> str:
         task_complexity = classify_task(request)
+        required = required_capabilities(request)
+        if "tool_use" in required and any(
+            self._matches_identity_policy(provider, request) for provider in self.providers
+        ):
+            return "tools"
+        if "structured_output" in required and any(
+            self._matches_identity_policy(provider, request) for provider in self.providers
+        ):
+            return "response_format"
         if request.routing.max_cost_usd is not None and any(
             self._matches_non_cost_policy(provider, request, task_complexity)
             for provider in self.providers
@@ -204,3 +216,12 @@ class ProviderRouter:
                 return "routing.allowed_providers"
             return "model"
         return "routing.allowed_providers"
+
+    @staticmethod
+    def _matches_identity_policy(provider: ChatProvider, request: ChatCompletionRequest) -> bool:
+        if request.model != "auto" and provider.model != request.model:
+            return False
+        return not (
+            request.routing.allowed_providers is not None
+            and provider.name not in request.routing.allowed_providers
+        )

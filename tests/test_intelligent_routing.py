@@ -14,7 +14,15 @@ NOW = datetime(2026, 10, 28, tzinfo=UTC)
 
 
 class Provider:
-    def __init__(self, name: str, *, cost: str, latency: int, quality: float) -> None:
+    def __init__(
+        self,
+        name: str,
+        *,
+        cost: str,
+        latency: int,
+        quality: float,
+        capabilities: frozenset[str] = frozenset({"text_generation"}),
+    ) -> None:
         self.name = name
         self.model = f"{name}-1"
         self.routing_profile = ModelRoutingProfile(
@@ -22,6 +30,7 @@ class Provider:
             output_cost_per_million_usd=Decimal(cost),
             estimated_latency_ms=latency,
             quality_score=quality,
+            capabilities=capabilities,
         )
 
     async def complete(self, request: ChatCompletionRequest) -> ProviderResult:
@@ -215,7 +224,13 @@ def test_provider_allowlist_is_a_hard_filter() -> None:
 
 def test_required_tool_capability_filters_evidence() -> None:
     text_only = Provider("text", cost="1", latency=100, quality=0.9)
-    tool_capable = Provider("tool", cost="1", latency=100, quality=0.8)
+    tool_capable = Provider(
+        "tool",
+        cost="1",
+        latency=100,
+        quality=0.8,
+        capabilities=frozenset({"text_generation", "tool_use"}),
+    )
 
     result = plan(
         (text_only, tool_capable),
@@ -228,6 +243,39 @@ def test_required_tool_capability_filters_evidence() -> None:
 
     assert result.required_capabilities == frozenset({"text_generation", "tool_use"})
     assert [item.provider.name for item in result.candidates] == ["tool"]
+
+
+def test_required_structured_output_capability_filters_profiles_and_evidence() -> None:
+    text_only = Provider("text", cost="1", latency=100, quality=0.9)
+    structured = Provider(
+        "structured",
+        cost="1",
+        latency=100,
+        quality=0.8,
+        capabilities=frozenset({"text_generation", "structured_output"}),
+    )
+    structured_request = ChatCompletionRequest.model_validate(
+        {
+            **request().model_dump(),
+            "response_format": {"type": "json_object"},
+        }
+    )
+
+    result = plan(
+        (text_only, structured),
+        structured_request,
+        (
+            score(text_only, "0.9", capabilities=["text_generation"]),
+            score(
+                structured,
+                "0.8",
+                capabilities=["text_generation", "structured_output"],
+            ),
+        ),
+    )
+
+    assert result.required_capabilities == frozenset({"text_generation", "structured_output"})
+    assert [item.provider.name for item in result.candidates] == ["structured"]
 
 
 def test_wrong_version_and_insufficient_samples_are_not_routed() -> None:

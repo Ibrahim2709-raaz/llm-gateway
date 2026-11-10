@@ -36,9 +36,11 @@ from app.schemas.chat import (
     ChatCompletionRequest,
     ChatCompletionResponse,
     Choice,
+    FunctionCall,
     GatewayMetadata,
     ResponseMessage,
     TokenUsage,
+    ToolCall,
 )
 from app.usage.service import UsageTracker
 
@@ -254,7 +256,20 @@ class ChatCompletionService:
             choices=[
                 Choice(
                     index=0,
-                    message=ResponseMessage(content=result.content),
+                    message=ResponseMessage(
+                        content=result.content,
+                        tool_calls=[
+                            ToolCall(
+                                id=tool_call.id,
+                                function=FunctionCall(
+                                    name=tool_call.name,
+                                    arguments=tool_call.arguments,
+                                ),
+                            )
+                            for tool_call in result.tool_calls
+                        ]
+                        or None,
+                    ),
                     finish_reason=result.finish_reason,
                 )
             ],
@@ -300,9 +315,7 @@ class ChatCompletionService:
         if self.routing_preference_resolver is not None:
             request = await self.routing_preference_resolver.apply(client_id, request)
         routing_control = await self._routing_control()
-        plan = await self._plan(
-            request, client_id, record_shadow=False, control=routing_control
-        )
+        plan = await self._plan(request, client_id, record_shadow=False, control=routing_control)
         return ChatPlanPreview(request=request, plan=plan)
 
     async def _plan(
@@ -383,7 +396,9 @@ class ChatCompletionService:
         mode: RoutingMode = (
             "shadow"
             if self.intelligent_routing_shadow_enabled
-            else "live" if self.intelligent_routing_enabled else "baseline"
+            else "live"
+            if self.intelligent_routing_enabled
+            else "baseline"
         )
         return RoutingRuntimeConfiguration(
             mode=mode,

@@ -137,13 +137,61 @@ async def test_anthropic_provider_rejects_empty_text_output() -> None:
 
 
 @pytest.mark.anyio
+async def test_anthropic_provider_maps_structured_output_and_function_tools() -> None:
+    response = SimpleNamespace(
+        content=[
+            SimpleNamespace(
+                type="tool_use",
+                id="toolu_weather",
+                name="lookup_weather",
+                input={"city": "Paris"},
+            )
+        ],
+        model="claude-sonnet-5-5",
+        stop_reason="tool_use",
+        usage=SimpleNamespace(input_tokens=20, output_tokens=10),
+    )
+    provider, create = make_provider(response)
+    request = ChatCompletionRequest.model_validate(
+        {
+            "messages": [{"role": "user", "content": "Weather in Paris?"}],
+            "response_format": {
+                "type": "json_schema",
+                "json_schema": {
+                    "name": "weather",
+                    "schema": {"type": "object"},
+                },
+            },
+            "tools": [
+                {
+                    "type": "function",
+                    "function": {
+                        "name": "lookup_weather",
+                        "parameters": {"type": "object"},
+                    },
+                }
+            ],
+            "tool_choice": "required",
+        }
+    )
+
+    result = await provider.complete(request)
+
+    assert result.content is None
+    assert result.finish_reason == "tool_calls"
+    assert result.tool_calls[0].arguments == '{"city":"Paris"}'
+    options = create.await_args.kwargs
+    assert options["output_config"]["format"]["type"] == "json_schema"
+    assert options["tools"][0]["name"] == "lookup_weather"
+    assert options["tool_choice"] == {"type": "any"}
+
+
+@pytest.mark.anyio
 @pytest.mark.parametrize(
     ("sdk_error", "gateway_error"),
     [
         (
-            anthropic.APITimeoutError(
-                request=httpx2.Request("POST", "https://api.anthropic.com")
-            ),
+            anthropic.APITimeoutError(request=httpx2.Request("POST", "https://api.anthropic.com")),
             ProviderTimeoutError,
         ),
         (

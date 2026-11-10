@@ -30,7 +30,10 @@ separate React deployment, reducing the launch attack surface and operational
 footprint. Server-sent streaming remains in Milestone 4 because cancellation
 and exact usage settlement require a gateway-wide protocol change; the MVP
 playground follows the current non-streaming API contract. Milestone 3 is
-complete. Milestones 4 through 7 remain post-MVP product increments.
+complete. Milestone 4 is in progress: structured-output and function-tool
+contracts now participate in hard routing constraints, while streaming,
+idempotency, webhooks, SDKs, and generated reference material remain. Milestones
+5 through 7 remain post-MVP product increments.
 
 ## Product principles
 
@@ -120,6 +123,12 @@ and the consolidated operational summary are implemented.
 - The emergency baseline rollback remains available even if the web UI fails.
 
 ## Milestone 4: Developer experience and API completeness
+
+Status: in progress. The versioned request contract now accepts text, JSON,
+JSON Schema, and function-tool declarations; both baseline and evidence-driven
+routers require matching provider and score capabilities before execution.
+OpenAI, Anthropic, and local OpenAI-compatible adapters translate the supported
+contracts and normalize function calls in responses.
 
 ### Work
 

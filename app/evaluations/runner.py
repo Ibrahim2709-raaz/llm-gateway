@@ -74,7 +74,7 @@ class EvaluationRunner:
             request = ChatCompletionRequest.model_validate(case.prompt)
             provider_result = await self.provider.complete(request)
             scoring = score_output(
-                provider_result.content,
+                provider_result.content or "",
                 expected_output=case.expected_output,
                 configuration=case.scoring_configuration,
             )

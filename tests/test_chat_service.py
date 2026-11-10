@@ -13,6 +13,7 @@ from app.providers.base import (
     ProviderRequestError,
     ProviderResult,
     ProviderTimeoutError,
+    ProviderToolCall,
     ProviderUnavailableError,
 )
 from app.routing.repository import (
@@ -62,6 +63,34 @@ class FailingProvider:
         raise self.error
 
 
+class ToolProvider:
+    name = "tools"
+    model = "tools-1"
+    routing_profile = ModelRoutingProfile(
+        input_cost_per_million_usd=Decimal("1"),
+        output_cost_per_million_usd=Decimal("2"),
+        estimated_latency_ms=100,
+        quality_score=0.8,
+        capabilities=frozenset({"text_generation", "tool_use"}),
+    )
+
+    async def complete(self, request: ChatCompletionRequest) -> ProviderResult:
+        return ProviderResult(
+            content=None,
+            model=self.model,
+            prompt_tokens=10,
+            completion_tokens=5,
+            finish_reason="tool_calls",
+            tool_calls=(
+                ProviderToolCall(
+                    id="call_weather",
+                    name="lookup_weather",
+                    arguments='{"city":"Paris"}',
+                ),
+            ),
+        )
+
+
 class ShadowProvider:
     def __init__(self, name: str, *, static_quality: float) -> None:
         self.name = name
@@ -108,6 +137,35 @@ async def test_service_selects_explicit_model_and_reports_cost() -> None:
     assert result.gateway.routing_strategy == "explicit"
     assert result.gateway.task_complexity == "simple"
     assert result.gateway.estimated_cost_usd > 0
+
+
+@pytest.mark.anyio
+async def test_service_returns_openai_compatible_function_tool_call() -> None:
+    provider = ToolProvider()
+    service = ChatCompletionService((provider,))
+    request = ChatCompletionRequest.model_validate(
+        {
+            "model": provider.model,
+            "messages": [{"role": "user", "content": "Weather in Paris?"}],
+            "tools": [
+                {
+                    "type": "function",
+                    "function": {
+                        "name": "lookup_weather",
+                        "parameters": {"type": "object"},
+                    },
+                }
+            ],
+            "tool_choice": "required",
+        }
+    )
+
+    result = await service.create(request, uuid4(), uuid4())
+
+    assert result.choices[0].finish_reason == "tool_calls"
+    assert result.choices[0].message.content is None
+    assert result.choices[0].message.tool_calls is not None
+    assert result.choices[0].message.tool_calls[0].function.name == "lookup_weather"
 
 
 @pytest.mark.anyio
@@ -253,8 +311,9 @@ async def test_intelligent_routing_fails_closed_when_evidence_versions_do_not_ma
 
 
 @pytest.mark.anyio
-async def test_intelligent_routing_canary_exclusion_uses_baseline_without_loading_evidence(
-) -> None:
+async def test_intelligent_routing_canary_exclusion_uses_baseline_without_loading_evidence() -> (
+    None
+):
     provider = SuccessfulProvider()
     repository = AsyncMock(spec=DatabaseRoutingEvidenceRepository)
     metrics = Mock()

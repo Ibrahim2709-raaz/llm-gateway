@@ -6,6 +6,11 @@ All notable changes to this project are documented in this file.
 
 ### Added
 
+- Milestone 4 contract foundations: OpenAI-compatible JSON/JSON-Schema response
+  formats and function-tool declarations, hard capability filtering in both
+  baseline and evidence-driven routing, native OpenAI and Anthropic adapter
+  translation, and normalized assistant tool-call responses.
+
 - A platform-operator-only model catalog in the portal showing configured
   availability, price estimates, context metadata, capabilities, latency,
   quality, and routing eligibility without exposing provider credentials.

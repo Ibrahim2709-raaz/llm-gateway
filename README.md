@@ -276,8 +276,9 @@ retry and fallback path, usage accounting, and observability as the public chat
 API. The browser authenticates with its HTTP-only portal session and never
 receives an organization gateway key. Results show actual token usage,
 estimated provider cost, cache status, route reasons, and provider attempts.
-The current playground deliberately supports non-streaming text completions,
-matching the gateway's current API contract.
+The current playground deliberately remains non-streaming. The public gateway
+contract also supports JSON, JSON Schema, and function-tool declarations; the
+playground UI will expose those controls with the later streaming work.
 
 Organization owners can review the portal audit feed at
 `/v1/portal/organizations/{id}/audit-events`. Audit metadata is filtered by
@@ -346,8 +347,11 @@ model and pricing defaults follow the
 [official OpenAI model documentation](https://developers.openai.com/api/docs/models/gpt-5.6-terra)
 and remain configurable through environment variables.
 
-Until structured tool calling is implemented, incoming `tool` messages are
-sent to OpenAI as clearly labelled user text.
+Structured-output and function-tool declarations are translated to the native
+Responses API, and returned function calls are normalized to the standard
+chat-completions `tool_calls` shape. Legacy incoming `tool` messages are still
+sent as clearly labelled user text until the full multi-turn tool transcript
+contract lands with the remaining Milestone 4 compatibility work.
 
 ### Enable Anthropic
 
@@ -367,9 +371,12 @@ configurable through environment variables. These defaults follow Anthropic's
 retries are disabled so the gateway's retry, circuit-breaker, and fallback
 layers remain authoritative.
 
-System messages are combined into Anthropic's top-level system instruction,
-and tool-result messages are sent as clearly labelled user text until native
-tool calling is implemented. The adapter omits `temperature` because current
+System messages are combined into Anthropic's top-level system instruction.
+Structured-output schemas and function declarations use Anthropic's native
+output and tool contracts, while returned tool-use blocks are normalized to
+chat-completions `tool_calls`. Legacy incoming tool-result messages remain
+clearly labelled user text until the full multi-turn transcript contract lands.
+The adapter omits `temperature` because current
 Claude models reject non-default sampling parameters; explicit assistant
 prefills are rejected as unsupported instead of being silently changed.
 

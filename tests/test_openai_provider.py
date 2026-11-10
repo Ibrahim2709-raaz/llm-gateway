@@ -88,6 +88,75 @@ async def test_openai_provider_reports_output_limit() -> None:
 
 
 @pytest.mark.anyio
+async def test_openai_provider_maps_structured_output_and_function_tools() -> None:
+    response = SimpleNamespace(
+        output_text="",
+        output=[
+            SimpleNamespace(
+                type="function_call",
+                call_id="call_weather",
+                name="lookup_weather",
+                arguments='{"city":"Paris"}',
+            )
+        ],
+        model="gpt-5.6-terra",
+        usage=SimpleNamespace(input_tokens=20, output_tokens=10),
+        incomplete_details=None,
+    )
+    provider, create = make_provider(response)
+    request = ChatCompletionRequest.model_validate(
+        {
+            "messages": [{"role": "user", "content": "Weather in Paris?"}],
+            "response_format": {
+                "type": "json_schema",
+                "json_schema": {
+                    "name": "weather",
+                    "schema": {
+                        "type": "object",
+                        "properties": {"temperature": {"type": "number"}},
+                        "required": ["temperature"],
+                        "additionalProperties": False,
+                    },
+                    "strict": True,
+                },
+            },
+            "tools": [
+                {
+                    "type": "function",
+                    "function": {
+                        "name": "lookup_weather",
+                        "description": "Look up weather",
+                        "parameters": {
+                            "type": "object",
+                            "properties": {"city": {"type": "string"}},
+                            "required": ["city"],
+                        },
+                        "strict": True,
+                    },
+                }
+            ],
+            "tool_choice": {
+                "type": "function",
+                "function": {"name": "lookup_weather"},
+            },
+        }
+    )
+
+    result = await provider.complete(request)
+
+    assert result.content is None
+    assert result.finish_reason == "tool_calls"
+    assert result.tool_calls[0].name == "lookup_weather"
+    options = create.await_args.kwargs
+    assert options["text"]["format"]["type"] == "json_schema"
+    assert options["tools"][0]["name"] == "lookup_weather"
+    assert options["tool_choice"] == {
+        "type": "function",
+        "name": "lookup_weather",
+    }
+
+
+@pytest.mark.anyio
 async def test_openai_provider_rejects_too_small_output_limit() -> None:
     provider, create = make_provider()
 

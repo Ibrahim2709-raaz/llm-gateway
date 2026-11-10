@@ -10,9 +10,10 @@ from app.providers.base import (
     ProviderRequestError,
     ProviderResult,
     ProviderTimeoutError,
+    ProviderToolCall,
     ProviderUnavailableError,
 )
-from app.schemas.chat import ChatCompletionRequest
+from app.schemas.chat import ChatCompletionRequest, NamedToolChoice
 
 
 class LocalOpenAIProvider:
@@ -51,14 +52,28 @@ class LocalOpenAIProvider:
             }
             for message in request.messages
         ]
-        try:
-            response = await self.client.chat.completions.create(
-                model=self.model,
-                messages=cast(Any, messages),
-                max_tokens=request.max_tokens,
-                temperature=request.temperature,
-                stream=False,
+        request_options: dict[str, Any] = {
+            "model": self.model,
+            "messages": messages,
+            "max_tokens": request.max_tokens,
+            "temperature": request.temperature,
+            "stream": False,
+        }
+        if request.response_format.type != "text":
+            request_options["response_format"] = request.response_format.model_dump(
+                by_alias=True, exclude_none=True
             )
+        if request.tools is not None:
+            request_options["tools"] = [
+                tool.model_dump(by_alias=True, exclude_none=True) for tool in request.tools
+            ]
+            request_options["tool_choice"] = (
+                request.tool_choice.model_dump(by_alias=True, exclude_none=True)
+                if isinstance(request.tool_choice, NamedToolChoice)
+                else request.tool_choice
+            )
+        try:
+            response = await self.client.chat.completions.create(**cast(Any, request_options))
         except openai.APITimeoutError as exc:
             raise ProviderTimeoutError("Local provider request timed out") from exc
         except openai.RateLimitError as exc:
@@ -71,7 +86,15 @@ class LocalOpenAIProvider:
         if not response.choices:
             raise ProviderUnavailableError("Local provider returned no choices")
         choice = response.choices[0]
-        if not choice.message.content:
+        tool_calls = tuple(
+            ProviderToolCall(
+                id=str(tool_call.id),
+                name=str(tool_call.function.name),
+                arguments=str(tool_call.function.arguments),
+            )
+            for tool_call in (getattr(choice.message, "tool_calls", None) or ())
+        )
+        if not choice.message.content and not tool_calls:
             raise ProviderUnavailableError("Local provider returned no text output")
 
         usage = response.usage
@@ -81,11 +104,13 @@ class LocalOpenAIProvider:
             Decimal(prompt_tokens) * self.input_cost_per_million_usd
             + Decimal(completion_tokens) * self.output_cost_per_million_usd
         ) / Decimal(1_000_000)
-        finish_reason: Literal["stop", "length", "content_filter"]
+        finish_reason: Literal["stop", "length", "content_filter", "tool_calls"]
         if choice.finish_reason == "length":
             finish_reason = "length"
         elif choice.finish_reason == "content_filter":
             finish_reason = "content_filter"
+        elif tool_calls:
+            finish_reason = "tool_calls"
         else:
             finish_reason = "stop"
 
@@ -96,4 +121,5 @@ class LocalOpenAIProvider:
             completion_tokens=completion_tokens,
             finish_reason=finish_reason,
             cost_usd=cost_usd,
+            tool_calls=tool_calls,
         )

@@ -132,3 +132,56 @@ def test_chat_accepts_a_system_only_message(client: TestClient) -> None:
 
     assert response.status_code == 200
     assert response.json()["choices"][0]["message"]["content"] == "Mock response: Be concise."
+
+
+@pytest.mark.parametrize(
+    "invalid_fields",
+    [
+        {"tool_choice": "required"},
+        {"tool_choice": {"type": "function", "function": {"name": "missing"}}},
+        {
+            "tools": [
+                {
+                    "type": "function",
+                    "function": {"name": "same", "parameters": {"type": "object"}},
+                },
+                {
+                    "type": "function",
+                    "function": {"name": "same", "parameters": {"type": "object"}},
+                },
+            ]
+        },
+        {
+            "tools": [
+                {
+                    "type": "function",
+                    "function": {"name": "known", "parameters": {"type": "object"}},
+                }
+            ],
+            "tool_choice": {"type": "function", "function": {"name": "missing"}},
+        },
+    ],
+)
+def test_tool_contract_validation(client: TestClient, invalid_fields: dict[str, object]) -> None:
+    response = client.post(
+        "/v1/chat/completions",
+        json={"messages": [{"role": "user", "content": "Hello"}], **invalid_fields},
+    )
+
+    assert response.status_code == 422
+    assert response.json()["error"]["code"] == "validation_error"
+
+
+def test_text_only_provider_rejects_structured_output_before_execution(
+    client: TestClient,
+) -> None:
+    response = client.post(
+        "/v1/chat/completions",
+        json={
+            "messages": [{"role": "user", "content": "Return JSON"}],
+            "response_format": {"type": "json_object"},
+        },
+    )
+
+    assert response.status_code == 503
+    assert response.json()["error"]["param"] == "response_format"

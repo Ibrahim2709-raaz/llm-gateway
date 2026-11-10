@@ -137,6 +137,54 @@ async def test_local_provider_rejects_missing_text(response: object) -> None:
 
 
 @pytest.mark.anyio
+async def test_local_provider_maps_chat_completion_tool_calls() -> None:
+    response = SimpleNamespace(
+        choices=[
+            SimpleNamespace(
+                message=SimpleNamespace(
+                    content=None,
+                    tool_calls=[
+                        SimpleNamespace(
+                            id="call_weather",
+                            function=SimpleNamespace(
+                                name="lookup_weather", arguments='{"city":"Paris"}'
+                            ),
+                        )
+                    ],
+                ),
+                finish_reason="tool_calls",
+            )
+        ],
+        model="qwen3:8b",
+        usage=None,
+    )
+    provider, create = make_provider(response)
+    request = ChatCompletionRequest.model_validate(
+        {
+            "messages": [{"role": "user", "content": "Weather in Paris?"}],
+            "tools": [
+                {
+                    "type": "function",
+                    "function": {
+                        "name": "lookup_weather",
+                        "parameters": {"type": "object"},
+                    },
+                }
+            ],
+            "tool_choice": "required",
+        }
+    )
+
+    result = await provider.complete(request)
+
+    assert result.finish_reason == "tool_calls"
+    assert result.tool_calls[0].id == "call_weather"
+    options = create.await_args.kwargs
+    assert options["tools"][0]["function"]["name"] == "lookup_weather"
+    assert options["tool_choice"] == "required"
+
+
+@pytest.mark.anyio
 @pytest.mark.parametrize(
     ("sdk_error", "gateway_error"),
     [

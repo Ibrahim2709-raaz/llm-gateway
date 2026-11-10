@@ -210,6 +210,100 @@ components:
         disable_cache:
           type: boolean
           default: false
+    FunctionDefinition:
+      type: object
+      additionalProperties: false
+      required: [name]
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 64
+          pattern: "^[A-Za-z0-9_-]+$"
+        description:
+          type: [string, "null"]
+          maxLength: 4096
+        parameters:
+          type: object
+          additionalProperties: true
+          default: {type: object}
+        strict:
+          type: boolean
+          default: false
+    FunctionTool:
+      type: object
+      additionalProperties: false
+      required: [function]
+      properties:
+        type:
+          type: string
+          const: function
+          default: function
+        function:
+          $ref: "#/components/schemas/FunctionDefinition"
+    NamedFunctionToolChoice:
+      type: object
+      additionalProperties: false
+      required: [name]
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 64
+          pattern: "^[A-Za-z0-9_-]+$"
+    NamedToolChoice:
+      type: object
+      additionalProperties: false
+      required: [function]
+      properties:
+        type:
+          type: string
+          const: function
+          default: function
+        function:
+          $ref: "#/components/schemas/NamedFunctionToolChoice"
+    ResponseFormat:
+      oneOf:
+        - type: object
+          additionalProperties: false
+          properties:
+            type:
+              type: string
+              const: text
+              default: text
+        - type: object
+          additionalProperties: false
+          required: [type]
+          properties:
+            type:
+              type: string
+              const: json_object
+        - type: object
+          additionalProperties: false
+          required: [type, json_schema]
+          properties:
+            type:
+              type: string
+              const: json_schema
+            json_schema:
+              type: object
+              additionalProperties: false
+              required: [name, schema]
+              properties:
+                name:
+                  type: string
+                  minLength: 1
+                  maxLength: 64
+                  pattern: "^[A-Za-z0-9_-]+$"
+                description:
+                  type: [string, "null"]
+                  maxLength: 4096
+                schema:
+                  type: object
+                  additionalProperties: true
+                strict:
+                  type: boolean
+                  default: true
     ChatCompletionRequest:
       type: object
       additionalProperties: false
@@ -239,18 +333,58 @@ components:
           type: boolean
           enum: [false]
           default: false
+        response_format:
+          $ref: "#/components/schemas/ResponseFormat"
+        tools:
+          type: [array, "null"]
+          minItems: 1
+          maxItems: 128
+          items:
+            $ref: "#/components/schemas/FunctionTool"
+        tool_choice:
+          oneOf:
+            - type: string
+              enum: [none, auto, required]
+            - $ref: "#/components/schemas/NamedToolChoice"
+          default: auto
         routing:
           $ref: "#/components/schemas/RoutingOptions"
+    FunctionCall:
+      type: object
+      additionalProperties: false
+      required: [name, arguments]
+      properties:
+        name:
+          type: string
+        arguments:
+          type: string
+    ToolCall:
+      type: object
+      additionalProperties: false
+      required: [id, function]
+      properties:
+        id:
+          type: string
+        type:
+          type: string
+          const: function
+          default: function
+        function:
+          $ref: "#/components/schemas/FunctionCall"
     ResponseMessage:
       type: object
       additionalProperties: false
-      required: [role, content]
+      required: [role]
       properties:
         role:
           type: string
           const: assistant
         content:
-          type: string
+          type: [string, "null"]
+        tool_calls:
+          type: [array, "null"]
+          items:
+            $ref: "#/components/schemas/ToolCall"
     Choice:
       type: object
       additionalProperties: false
@@ -263,7 +397,7 @@ components:
           $ref: "#/components/schemas/ResponseMessage"
         finish_reason:
           type: string
-          enum: [stop, length, content_filter]
+          enum: [stop, length, content_filter, tool_calls]
     TokenUsage:
       type: object
       additionalProperties: false

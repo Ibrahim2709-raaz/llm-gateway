@@ -6,13 +6,21 @@ from app.schemas.chat import ChatCompletionRequest
 
 
 @dataclass(frozen=True, slots=True)
+class ProviderToolCall:
+    id: str
+    name: str
+    arguments: str
+
+
+@dataclass(frozen=True, slots=True)
 class ProviderResult:
-    content: str
+    content: str | None
     model: str
     prompt_tokens: int
     completion_tokens: int
-    finish_reason: Literal["stop", "length", "content_filter"]
+    finish_reason: Literal["stop", "length", "content_filter", "tool_calls"]
     cost_usd: Decimal = Decimal("0")
+    tool_calls: tuple[ProviderToolCall, ...] = ()
 
 
 TaskComplexity = Literal["simple", "medium", "complex"]
@@ -26,6 +34,7 @@ class ModelRoutingProfile:
     quality_score: float
     max_complexity: TaskComplexity = "complex"
     auto_selectable: bool = True
+    capabilities: frozenset[str] = frozenset({"text_generation"})
 
 
 class ProviderError(Exception):
