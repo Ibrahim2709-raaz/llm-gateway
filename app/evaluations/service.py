@@ -49,9 +49,7 @@ class DatabaseEvaluationService:
 
     async def execute(self, run_id: UUID, *, resume: bool = False) -> EvaluationRunSummary:
         run = await self.session.scalar(
-            select(EvaluationRun)
-            .where(EvaluationRun.id == run_id)
-            .with_for_update()
+            select(EvaluationRun).where(EvaluationRun.id == run_id).with_for_update()
         )
         if run is None:
             raise EvaluationRunError("run_not_found", f"Evaluation run '{run_id}' was not found")
@@ -96,9 +94,7 @@ class DatabaseEvaluationService:
         if not cases:
             raise EvaluationRunError("dataset_empty", "Evaluation dataset contains no cases")
         existing_result_rows = await self.session.execute(
-            select(EvaluationCaseResult).where(
-                EvaluationCaseResult.evaluation_run_id == run.id
-            )
+            select(EvaluationCaseResult).where(EvaluationCaseResult.evaluation_run_id == run.id)
         )
         existing_results = list(existing_result_rows.scalars().all())
         completed_case_ids = frozenset(result.evaluation_case_id for result in existing_results)

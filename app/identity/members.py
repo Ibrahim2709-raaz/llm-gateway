@@ -126,9 +126,9 @@ async def accept_organization_invitation(
 ) -> OrganizationMembership:
     current_time = now or utc_now()
     invitation = await database.scalar(
-        select(OrganizationInvitation).where(
-            OrganizationInvitation.token_hash == hash_opaque_token(value)
-        ).with_for_update()
+        select(OrganizationInvitation)
+        .where(OrganizationInvitation.token_hash == hash_opaque_token(value))
+        .with_for_update()
     )
     if (
         invitation is None
@@ -149,10 +149,12 @@ async def accept_organization_invitation(
         raise InvitationError("Invitation is invalid or expired")
 
     membership = await database.scalar(
-        select(OrganizationMembership).where(
+        select(OrganizationMembership)
+        .where(
             OrganizationMembership.organization_id == invitation.organization_id,
             OrganizationMembership.user_id == user.id,
-        ).with_for_update()
+        )
+        .with_for_update()
     )
     if membership is None:
         membership = OrganizationMembership(
@@ -302,10 +304,12 @@ async def update_organization_member(
     if role not in ORGANIZATION_ROLES or status not in {"active", "suspended"}:
         raise ValueError("Unsupported membership role or status")
     membership = await database.scalar(
-        select(OrganizationMembership).where(
+        select(OrganizationMembership)
+        .where(
             OrganizationMembership.id == membership_id,
             OrganizationMembership.organization_id == organization_id,
-        ).with_for_update()
+        )
+        .with_for_update()
     )
     if membership is None:
         raise MembershipConflictError("Organization membership does not exist")
@@ -313,11 +317,13 @@ async def update_organization_member(
     removes_owner = membership.role == "owner" and (role != "owner" or status != "active")
     if removes_owner:
         owner_rows = await database.scalars(
-            select(OrganizationMembership.id).where(
+            select(OrganizationMembership.id)
+            .where(
                 OrganizationMembership.organization_id == organization_id,
                 OrganizationMembership.role == "owner",
                 OrganizationMembership.status == "active",
-            ).with_for_update()
+            )
+            .with_for_update()
         )
         if len(owner_rows.all()) <= 1:
             raise MembershipConflictError("The final active owner cannot be removed")

@@ -124,12 +124,12 @@ class SmtpPortalEmailDelivery:
         safe_action = html.escape(action)
         safe_link = html.escape(link, quote=True)
         return (
-            "<!doctype html><html><body style=\"font-family:Arial,sans-serif;"
-            "color:#0b1220\"><h1>"
-            f"{safe_heading}</h1><p>{safe_explanation}</p><p><a href=\"{safe_link}\" "
-            "style=\"background:#2563eb;color:#fff;padding:12px 18px;"
-            f"text-decoration:none;border-radius:6px\">{safe_action}</a></p>"
-            f"<p style=\"color:#64748b\">Or open: {safe_link}</p></body></html>"
+            '<!doctype html><html><body style="font-family:Arial,sans-serif;'
+            'color:#0b1220"><h1>'
+            f'{safe_heading}</h1><p>{safe_explanation}</p><p><a href="{safe_link}" '
+            'style="background:#2563eb;color:#fff;padding:12px 18px;'
+            f'text-decoration:none;border-radius:6px">{safe_action}</a></p>'
+            f'<p style="color:#64748b">Or open: {safe_link}</p></body></html>'
         )
 
     async def _send(self, action_email: PortalActionEmail) -> None:

@@ -158,9 +158,7 @@ class UserActionToken(UUIDPrimaryKeyMixin, Base):
 class OrganizationMembership(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     __tablename__ = "organization_memberships"
     __table_args__ = (
-        UniqueConstraint(
-            "organization_id", "user_id", name="uq_organization_membership_user"
-        ),
+        UniqueConstraint("organization_id", "user_id", name="uq_organization_membership_user"),
         CheckConstraint(
             f"role IN ({_sql_values(ORGANIZATION_ROLES)})",
             name="organization_membership_role",
@@ -482,9 +480,7 @@ class EvaluationCaseResult(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     metrics: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict, nullable=False)
     prompt_tokens: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     completion_tokens: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
-    cost_usd: Mapped[Decimal] = mapped_column(
-        Numeric(18, 8), default=Decimal("0"), nullable=False
-    )
+    cost_usd: Mapped[Decimal] = mapped_column(Numeric(18, 8), default=Decimal("0"), nullable=False)
     latency_ms: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     error_code: Mapped[str | None] = mapped_column(String(64))
 
@@ -662,9 +658,7 @@ class RoutingRolloutChange(UUIDPrimaryKeyMixin, Base):
     previous_configuration: Mapped[dict[str, Any]] = mapped_column(
         JSON, default=dict, nullable=False
     )
-    new_configuration: Mapped[dict[str, Any]] = mapped_column(
-        JSON, default=dict, nullable=False
-    )
+    new_configuration: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict, nullable=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False, index=True
     )

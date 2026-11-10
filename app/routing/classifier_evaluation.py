@@ -91,9 +91,7 @@ def evaluate_classifier(
     difficulty_correct = 0
     latencies_ns: list[int] = []
     for case in selected:
-        request = ChatCompletionRequest(
-            messages=[ChatMessage(role="user", content=case.prompt)]
-        )
+        request = ChatCompletionRequest(messages=[ChatMessage(role="user", content=case.prompt)])
         started = perf_counter_ns()
         result = classify_request(request)
         latencies_ns.append(perf_counter_ns() - started)

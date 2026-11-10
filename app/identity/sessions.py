@@ -195,16 +195,16 @@ async def consume_user_action_token(
         raise ActionTokenError("Invalid or expired action token")
 
     current_time = now or utc_now()
-    statement = select(UserActionToken).where(
-        UserActionToken.token_hash == hash_opaque_token(value),
-        UserActionToken.purpose == purpose,
-    ).with_for_update()
+    statement = (
+        select(UserActionToken)
+        .where(
+            UserActionToken.token_hash == hash_opaque_token(value),
+            UserActionToken.purpose == purpose,
+        )
+        .with_for_update()
+    )
     stored = await database.scalar(statement)
-    if (
-        stored is None
-        or stored.consumed_at is not None
-        or stored.expires_at <= current_time
-    ):
+    if stored is None or stored.consumed_at is not None or stored.expires_at <= current_time:
         raise ActionTokenError("Invalid or expired action token")
     stored.consumed_at = current_time
     await database.flush()

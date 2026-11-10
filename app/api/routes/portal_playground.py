@@ -64,9 +64,7 @@ async def preview_playground_request(
     preview = await service.preview(payload, identity.organization.client_id)
     primary = preview.plan.candidates[0]
     routing_strategy = (
-        "explicit"
-        if preview.request.model != "auto"
-        else preview.request.routing.strategy
+        "explicit" if preview.request.model != "auto" else preview.request.routing.strategy
     )
     return PlaygroundPreviewResponse(
         selected_provider=primary.provider.name,

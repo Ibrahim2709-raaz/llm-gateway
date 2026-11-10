@@ -16,9 +16,7 @@ class DatabaseRoutingPreferenceResolver:
     def __init__(self, database: AsyncSession) -> None:
         self.database = database
 
-    async def apply(
-        self, client_id: UUID, request: ChatCompletionRequest
-    ) -> ChatCompletionRequest:
+    async def apply(self, client_id: UUID, request: ChatCompletionRequest) -> ChatCompletionRequest:
         return await apply_client_routing_preference(
             self.database,
             client_id=client_id,
@@ -82,7 +80,5 @@ async def apply_client_routing_preference(
     )
     if strategy is None:
         return request
-    routing = request.routing.model_copy(
-        update={"strategy": cast(RoutingStrategy, strategy)}
-    )
+    routing = request.routing.model_copy(update={"strategy": cast(RoutingStrategy, strategy)})
     return request.model_copy(update={"routing": routing})

@@ -214,9 +214,7 @@ class GatewayMetrics:
         self.cache_requests.labels(result=result).inc()
 
     def record_cache_savings(self, provider: str, model: str, cost_usd: float) -> None:
-        self.cache_saved_cost_usd.labels(provider=provider, model=model).inc(
-            max(0.0, cost_usd)
-        )
+        self.cache_saved_cost_usd.labels(provider=provider, model=model).inc(max(0.0, cost_usd))
 
     def record_rate_limit(self, decision: str) -> None:
         self.rate_limit_decisions.labels(decision=decision).inc()
@@ -264,9 +262,7 @@ class GatewayMetrics:
             score_version=score_version,
         ).inc()
         cost_labels = {"provider": provider, "model": model, "strategy": strategy}
-        self.intelligent_estimated_cost_usd.labels(**cost_labels).inc(
-            max(0.0, estimated_cost_usd)
-        )
+        self.intelligent_estimated_cost_usd.labels(**cost_labels).inc(max(0.0, estimated_cost_usd))
         self.intelligent_actual_cost_usd.labels(**cost_labels).inc(max(0.0, actual_cost_usd))
         self.intelligent_route_duration.labels(
             task_category=task_category,

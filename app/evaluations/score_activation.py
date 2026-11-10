@@ -90,13 +90,9 @@ async def compare_score_version(
         raise ScoreActivationError(
             "multiple_active_versions", "More than one active score version was found"
         )
-    active_by_key = {
-        (score.task_category, score.difficulty): score for score in active
-    }
+    active_by_key = {(score.task_category, score.difficulty): score for score in active}
     comparison_rows: list[ScoreComparisonRow] = []
-    for candidate in sorted(
-        candidates, key=lambda item: (item.task_category, item.difficulty)
-    ):
+    for candidate in sorted(candidates, key=lambda item: (item.task_category, item.difficulty)):
         current = active_by_key.get((candidate.task_category, candidate.difficulty))
         comparison_rows.append(
             ScoreComparisonRow(
@@ -145,9 +141,7 @@ async def change_active_score_set(
             "invalid_score_identity", "Provider, model, and score version are required"
         )
     if not actor_name or len(actor_name) > 200:
-        raise ScoreActivationError(
-            "invalid_actor", "Actor must contain 1 to 200 characters"
-        )
+        raise ScoreActivationError("invalid_actor", "Actor must contain 1 to 200 characters")
     if normalized_reason is not None and len(normalized_reason) > 500:
         raise ScoreActivationError(
             "invalid_reason", "Activation reason must be 500 characters or fewer"
@@ -160,9 +154,7 @@ async def change_active_score_set(
         )
 
     lock_key = f"score-activation:{provider_name}:{model_name}"
-    await session.execute(
-        select(func.pg_advisory_xact_lock(func.hashtextextended(lock_key, 0)))
-    )
+    await session.execute(select(func.pg_advisory_xact_lock(func.hashtextextended(lock_key, 0))))
     rows = (
         (
             await session.execute(

@@ -83,9 +83,7 @@ async def seed_routing_foundation(session: AsyncSession) -> FoundationSeedResult
         session.add(dataset)
 
     policy = await session.scalar(
-        select(RoutingPolicyVersion).where(
-            RoutingPolicyVersion.version == BASELINE_POLICY_VERSION
-        )
+        select(RoutingPolicyVersion).where(RoutingPolicyVersion.version == BASELINE_POLICY_VERSION)
     )
     policy_created = policy is None
     if policy is None:

@@ -57,12 +57,10 @@ def run_offline_replay(
             operational_stats=scenario.operational_stats,
         )
         first_order = tuple(
-            (candidate.provider.name, candidate.provider.model)
-            for candidate in first.candidates
+            (candidate.provider.name, candidate.provider.model) for candidate in first.candidates
         )
         second_order = tuple(
-            (candidate.provider.name, candidate.provider.model)
-            for candidate in second.candidates
+            (candidate.provider.name, candidate.provider.model) for candidate in second.candidates
         )
         if first_order != second_order:
             violations.append(
@@ -76,27 +74,20 @@ def run_offline_replay(
     return ReplayReport(len(scenarios), not violations, tuple(violations))
 
 
-def _audit_plan(
-    scenario: ReplayScenario, plan: EvidenceRoutingPlan
-) -> list[ReplayViolation]:
+def _audit_plan(scenario: ReplayScenario, plan: EvidenceRoutingPlan) -> list[ReplayViolation]:
     violations: list[ReplayViolation] = []
     seen: set[tuple[str, str]] = set()
     for candidate in plan.candidates:
         identity = (candidate.provider.name, candidate.provider.model)
         if identity in seen:
-            violations.append(
-                ReplayViolation(scenario.name, "duplicate_route", "/".join(identity))
-            )
+            violations.append(ReplayViolation(scenario.name, "duplicate_route", "/".join(identity)))
         seen.add(identity)
         allowed = scenario.request.routing.allowed_providers
         if allowed is not None and candidate.provider.name not in allowed:
             violations.append(
                 ReplayViolation(scenario.name, "provider_not_allowed", candidate.provider.name)
             )
-        if (
-            scenario.request.model != "auto"
-            and candidate.provider.model != scenario.request.model
-        ):
+        if scenario.request.model != "auto" and candidate.provider.model != scenario.request.model:
             violations.append(
                 ReplayViolation(scenario.name, "explicit_model_mismatch", candidate.provider.model)
             )

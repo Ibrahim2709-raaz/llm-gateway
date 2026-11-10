@@ -34,9 +34,7 @@ class DatabaseRoutingEvidenceRepository:
         policies = (
             (
                 await self.session.execute(
-                    select(RoutingPolicyVersion).where(
-                        RoutingPolicyVersion.status == "active"
-                    )
+                    select(RoutingPolicyVersion).where(RoutingPolicyVersion.status == "active")
                 )
             )
             .scalars()
@@ -113,9 +111,7 @@ class DatabaseRoutingEvidenceRepository:
         await self.session.flush()
         return snapshot
 
-    async def list_decisions(
-        self, *, client_id: UUID, limit: int
-    ) -> list[RoutingDecisionSnapshot]:
+    async def list_decisions(self, *, client_id: UUID, limit: int) -> list[RoutingDecisionSnapshot]:
         if not 1 <= limit <= 200:
             raise ValueError("Decision limit must be between 1 and 200")
         statement = (

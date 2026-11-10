@@ -111,8 +111,7 @@ async def list_service_accounts(
         select(ServiceAccount, ApiKey)
         .outerjoin(
             ApiKey,
-            (ApiKey.service_account_id == ServiceAccount.id)
-            & ApiKey.revoked_at.is_(None),
+            (ApiKey.service_account_id == ServiceAccount.id) & ApiKey.revoked_at.is_(None),
         )
         .where(ServiceAccount.organization_id == organization_id)
         .order_by(ServiceAccount.created_at.desc(), ServiceAccount.id)

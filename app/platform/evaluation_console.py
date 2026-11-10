@@ -149,9 +149,7 @@ async def list_score_versions(database: AsyncSession) -> list[ScoreVersionView]:
     views = []
     for (provider, model, version, status), entries in grouped.items():
         samples = sum(item.sample_count for item in entries)
-        weighted = sum(
-            float(item.quality_score) * item.sample_count for item in entries
-        ) / samples
+        weighted = sum(float(item.quality_score) * item.sample_count for item in entries) / samples
         expiries = [item.valid_until for item in entries if item.valid_until is not None]
         views.append(
             ScoreVersionView(

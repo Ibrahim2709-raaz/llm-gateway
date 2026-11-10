@@ -68,12 +68,8 @@ def create_resources(settings: Settings) -> AppResources:
             AnthropicProvider(
                 anthropic_client,
                 model=settings.anthropic_model,
-                input_cost_per_million_usd=(
-                    settings.anthropic_input_cost_per_million_usd
-                ),
-                output_cost_per_million_usd=(
-                    settings.anthropic_output_cost_per_million_usd
-                ),
+                input_cost_per_million_usd=(settings.anthropic_input_cost_per_million_usd),
+                output_cost_per_million_usd=(settings.anthropic_output_cost_per_million_usd),
                 estimated_latency_ms=settings.anthropic_estimated_latency_ms,
                 quality_score=settings.anthropic_quality_score,
             )

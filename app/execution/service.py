@@ -83,9 +83,8 @@ class ProviderExecutor:
                     provider.name,
                 )
             for retry_index in range(self.max_retries + 1):
-                if (
-                    self.circuit_breaker is not None
-                    and not await self.circuit_breaker.allow_call(provider_key)
+                if self.circuit_breaker is not None and not await self.circuit_breaker.allow_call(
+                    provider_key
                 ):
                     last_error = ProviderCircuitOpenError(
                         f"The circuit for {provider.name}/{provider.model} is open"

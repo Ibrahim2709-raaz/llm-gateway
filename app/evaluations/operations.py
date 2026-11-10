@@ -179,9 +179,7 @@ async def seed_smoke_evaluation_dataset(
         await session.flush()
 
     existing_id_rows = await session.execute(
-        select(EvaluationCase.external_id).where(
-            EvaluationCase.dataset_id == dataset.id
-        )
+        select(EvaluationCase.external_id).where(EvaluationCase.dataset_id == dataset.id)
     )
     existing_ids = set(existing_id_rows.scalars().all())
     case_definitions = (
@@ -274,9 +272,7 @@ async def create_evaluation_run(
     return run
 
 
-async def inspect_evaluation_run(
-    session: AsyncSession, run_id: UUID
-) -> EvaluationRunInspection:
+async def inspect_evaluation_run(session: AsyncSession, run_id: UUID) -> EvaluationRunInspection:
     run = await session.get(EvaluationRun, run_id)
     if run is None:
         raise ValueError(f"Evaluation run '{run_id}' was not found")
@@ -297,14 +293,11 @@ async def inspect_evaluation_run(
         )
         or 0
     )
-    total_cost = (
-        await session.scalar(
-            select(func.sum(EvaluationCaseResult.cost_usd)).where(
-                EvaluationCaseResult.evaluation_run_id == run.id
-            )
+    total_cost = await session.scalar(
+        select(func.sum(EvaluationCaseResult.cost_usd)).where(
+            EvaluationCaseResult.evaluation_run_id == run.id
         )
-        or Decimal("0")
-    )
+    ) or Decimal("0")
     return EvaluationRunInspection(
         run_id=run.id,
         dataset_id=run.dataset_id,
@@ -336,9 +329,7 @@ async def create_candidate_scores(
 
     expected_case_count = int(
         await session.scalar(
-            select(func.count(EvaluationCase.id)).where(
-                EvaluationCase.dataset_id == run.dataset_id
-            )
+            select(func.count(EvaluationCase.id)).where(EvaluationCase.dataset_id == run.dataset_id)
         )
         or 0
     )
@@ -384,8 +375,7 @@ async def create_candidate_scores(
         variance = sum((score - mean) ** 2 for score in values) / len(values)
         capabilities = ["text_generation"]
         if all(
-            case.scoring_configuration.get("method") == "json_fields"
-            for _score, case in samples
+            case.scoring_configuration.get("method") == "json_fields" for _score, case in samples
         ):
             capabilities.append("structured_output")
         session.add(

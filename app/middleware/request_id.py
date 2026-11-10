@@ -40,4 +40,3 @@ class RequestIdMiddleware:
             except (UnicodeDecodeError, ValueError):
                 return None
         return None
-

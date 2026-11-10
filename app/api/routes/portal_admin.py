@@ -264,9 +264,7 @@ async def list_admin_routing_policies(
     policies = (
         (
             await database.execute(
-                select(RoutingPolicyVersion).order_by(
-                    RoutingPolicyVersion.created_at.desc()
-                )
+                select(RoutingPolicyVersion).order_by(RoutingPolicyVersion.created_at.desc())
             )
         )
         .scalars()
@@ -429,9 +427,7 @@ async def change_admin_routing_rollout(
         await database.commit()
     except RoutingControlError as exc:
         await database.rollback()
-        raise GatewayError(
-            str(exc), code="routing_rollout_invalid", status_code=409
-        ) from exc
+        raise GatewayError(str(exc), code="routing_rollout_invalid", status_code=409) from exc
     except Exception:
         await database.rollback()
         raise
@@ -470,9 +466,7 @@ async def emergency_admin_routing_baseline(
         await database.commit()
     except RoutingControlError as exc:
         await database.rollback()
-        raise GatewayError(
-            str(exc), code="routing_rollout_invalid", status_code=409
-        ) from exc
+        raise GatewayError(str(exc), code="routing_rollout_invalid", status_code=409) from exc
     except Exception:
         await database.rollback()
         raise
@@ -675,9 +669,7 @@ async def execute_admin_evaluation_run(
             dataset_version=str(run.configuration.get("dataset_version", "")),
             provider=provider,
         )
-        approved_ceiling = Decimal(
-            str(run.configuration.get("approved_max_cost_usd", "0"))
-        )
+        approved_ceiling = Decimal(str(run.configuration.get("approved_max_cost_usd", "0")))
         if preview.estimated_max_cost_usd > approved_ceiling:
             raise GatewayError(
                 "The current evaluation estimate exceeds the approved cost ceiling.",
@@ -693,9 +685,7 @@ async def execute_admin_evaluation_run(
             event_data={
                 "provider": run.provider,
                 "model": run.model,
-                "current_estimated_max_cost_usd": str(
-                    preview.estimated_max_cost_usd
-                ),
+                "current_estimated_max_cost_usd": str(preview.estimated_max_cost_usd),
                 "approved_max_cost_usd": str(approved_ceiling),
             },
         )
@@ -724,9 +714,7 @@ async def execute_admin_evaluation_run(
     except EvaluationRunError as exc:
         await database.rollback()
         error_status = (
-            status.HTTP_404_NOT_FOUND
-            if exc.code == "run_not_found"
-            else status.HTTP_409_CONFLICT
+            status.HTTP_404_NOT_FOUND if exc.code == "run_not_found" else status.HTTP_409_CONFLICT
         )
         raise GatewayError(str(exc), code=exc.code, status_code=error_status) from exc
     except (ValueError, TypeError) as exc:

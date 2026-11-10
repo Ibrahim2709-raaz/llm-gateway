@@ -222,9 +222,7 @@ async def authenticate_account(
     hasher = password_hasher or ScryptPasswordHasher()
     user = await database.scalar(select(User).where(User.email_normalized == normalized_email))
     encoded_hash = (
-        user.password_hash
-        if user is not None and user.password_hash
-        else _DUMMY_PASSWORD_HASH
+        user.password_hash if user is not None and user.password_hash else _DUMMY_PASSWORD_HASH
     )
     password_valid = hasher.verify(password, encoded_hash)
     if (

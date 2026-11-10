@@ -75,14 +75,12 @@ async def run_command(arguments: argparse.Namespace) -> str:
                     provider=arguments.provider,
                     model=arguments.model,
                 )
-            return json.dumps(
-                {"run_id": str(run.id), "status": run.status}, indent=2
-            )
+            return json.dumps({"run_id": str(run.id), "status": run.status}, indent=2)
         if arguments.command in {"run", "resume"}:
             async with factory() as session:
-                run_summary = await DatabaseEvaluationService(
-                    session, resources.providers
-                ).execute(arguments.run_id, resume=arguments.command == "resume")
+                run_summary = await DatabaseEvaluationService(session, resources.providers).execute(
+                    arguments.run_id, resume=arguments.command == "resume"
+                )
             return json.dumps(asdict(run_summary), indent=2, default=str)
         if arguments.command == "publish-scores":
             async with factory.begin() as session:

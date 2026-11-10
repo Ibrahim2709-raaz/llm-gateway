@@ -102,8 +102,7 @@ class Settings(BaseSettings):
         if self.openai_enabled and missing_key:
             raise ValueError("OPENAI_API_KEY is required when OPENAI_ENABLED is true")
         missing_anthropic_key = (
-            self.anthropic_api_key is None
-            or not self.anthropic_api_key.get_secret_value().strip()
+            self.anthropic_api_key is None or not self.anthropic_api_key.get_secret_value().strip()
         )
         if self.anthropic_enabled and missing_anthropic_key:
             raise ValueError("ANTHROPIC_API_KEY is required when ANTHROPIC_ENABLED is true")
@@ -119,13 +118,16 @@ class Settings(BaseSettings):
                 "INTELLIGENT_ROUTING_ENABLED and INTELLIGENT_ROUTING_SHADOW_ENABLED "
                 "cannot both be true"
             )
-        controlled_rollout = (
-            self.intelligent_routing_canary_percent < 100
-            or bool(self.intelligent_routing_customer_allowlist.strip())
+        controlled_rollout = self.intelligent_routing_canary_percent < 100 or bool(
+            self.intelligent_routing_customer_allowlist.strip()
         )
-        if self.intelligent_routing_enabled and controlled_rollout and (
-            not self.intelligent_routing_required_policy_version
-            or not self.intelligent_routing_required_score_version
+        if (
+            self.intelligent_routing_enabled
+            and controlled_rollout
+            and (
+                not self.intelligent_routing_required_policy_version
+                or not self.intelligent_routing_required_score_version
+            )
         ):
             raise ValueError(
                 "Controlled intelligent routing requires pinned policy and score versions"
@@ -143,16 +145,13 @@ class Settings(BaseSettings):
             if not self.smtp_from_email or not self.smtp_from_email.strip():
                 raise ValueError("SMTP_FROM_EMAIL is required when SMTP delivery is enabled")
             username_configured = bool(self.smtp_username and self.smtp_username.strip())
-            password_configured = bool(
-                self.smtp_password and self.smtp_password.get_secret_value()
-            )
+            password_configured = bool(self.smtp_password and self.smtp_password.get_secret_value())
             if username_configured != password_configured:
                 raise ValueError("SMTP_USERNAME and SMTP_PASSWORD must be configured together")
             if not self.smtp_from_name.strip():
                 raise ValueError("SMTP_FROM_NAME must not be blank")
             if any(
-                character in f"{self.smtp_from_name}{self.smtp_from_email}"
-                for character in "\r\n"
+                character in f"{self.smtp_from_name}{self.smtp_from_email}" for character in "\r\n"
             ):
                 raise ValueError("SMTP sender fields cannot contain line breaks")
             assert self.smtp_from_email is not None

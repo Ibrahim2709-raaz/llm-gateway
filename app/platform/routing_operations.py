@@ -113,9 +113,7 @@ async def build_routing_operational_summary(
         await session.execute(
             select(
                 func.coalesce(
-                    func.sum(UsageRecord.cost_usd).filter(
-                        UsageRecord.created_at >= cutoff
-                    ),
+                    func.sum(UsageRecord.cost_usd).filter(UsageRecord.created_at >= cutoff),
                     0,
                 ),
                 func.coalesce(
@@ -131,21 +129,23 @@ async def build_routing_operational_summary(
     current_cost = Decimal(str(cost_rows[0]))
     previous_cost = Decimal(str(cost_rows[1]))
     cost_drift = (
-        float((current_cost - previous_cost) / previous_cost * 100)
-        if previous_cost > 0
-        else None
+        float((current_cost - previous_cost) / previous_cost * 100) if previous_cost > 0 else None
     )
 
     active_policy = await session.scalar(
         select(RoutingPolicyVersion).where(RoutingPolicyVersion.status == "active")
     )
     evidence_rows = (
-        await session.execute(
-            select(ModelCapabilityScore.valid_until).where(
-                ModelCapabilityScore.status == "active"
+        (
+            await session.execute(
+                select(ModelCapabilityScore.valid_until).where(
+                    ModelCapabilityScore.status == "active"
+                )
             )
         )
-    ).scalars().all()
+        .scalars()
+        .all()
+    )
     expiry_values = [value for value in evidence_rows if value is not None]
     valid_until = min(expiry_values) if expiry_values else None
     expired_count = sum(value <= observed_at for value in expiry_values)
@@ -159,15 +159,14 @@ async def build_routing_operational_summary(
             reasons.append("active_evidence_expired")
         elif valid_until is not None and valid_until <= observed_at + timedelta(hours=72):
             reasons.append("active_evidence_expires_soon")
-        if (
-            runtime.required_policy_version is None
-            or runtime.required_score_version is None
-        ):
+        if runtime.required_policy_version is None or runtime.required_score_version is None:
             reasons.append("evidence_pins_missing")
     alert_state = (
         "critical"
         if any(reason.endswith(("missing", "expired")) for reason in reasons)
-        else "warning" if reasons else "healthy"
+        else "warning"
+        if reasons
+        else "healthy"
     )
     return RoutingOperationalSummary(
         window_hours=window_hours,

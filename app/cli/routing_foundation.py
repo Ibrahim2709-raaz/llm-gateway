@@ -144,9 +144,7 @@ async def run(
                     session,
                     mode=mode,  # type: ignore[arg-type]
                     canary_percent=canary_percent,
-                    customer_allowlist=frozenset(
-                        UUID(value) for value in (allow_clients or [])
-                    ),
+                    customer_allowlist=frozenset(UUID(value) for value in (allow_clients or [])),
                     required_policy_version=policy_version,
                     required_score_version=score_version,
                     actor=actor,

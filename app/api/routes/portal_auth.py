@@ -349,9 +349,7 @@ async def current_account(
     identity: Annotated[BrowserIdentity, Depends(authenticate_portal_session)],
     database: Annotated[AsyncSession, Depends(get_database_session)],
 ) -> CurrentAccountResponse:
-    memberships = await list_active_memberships(
-        database, user_id=identity.authentication.user.id
-    )
+    memberships = await list_active_memberships(database, user_id=identity.authentication.user.id)
     return CurrentAccountResponse(
         user_id=identity.authentication.user.id,
         email=identity.authentication.user.email_normalized,
@@ -380,9 +378,7 @@ async def activate_organization(
     identity: Annotated[BrowserIdentity, Depends(require_portal_csrf)],
     database: Annotated[AsyncSession, Depends(get_database_session)],
 ) -> MessageResponse:
-    memberships = await list_active_memberships(
-        database, user_id=identity.authentication.user.id
-    )
+    memberships = await list_active_memberships(database, user_id=identity.authentication.user.id)
     if organization_id not in {organization.id for _, organization in memberships}:
         raise GatewayError(
             "The organization is unavailable.",
