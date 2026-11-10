@@ -11,6 +11,7 @@ from app.db.session import get_database_session
 from app.observability.metrics import METRICS
 from app.rate_limits.dependencies import enforce_request_rate_limit
 from app.rate_limits.service import RateLimitStatus
+from app.routing.control_plane import DatabaseRoutingControlResolver
 from app.routing.preferences import DatabaseRoutingPreferenceResolver
 from app.routing.repository import DatabaseRoutingEvidenceRepository
 from app.routing.rollout import IntelligentRoutingRollout
@@ -59,6 +60,7 @@ def get_chat_service(
         # customer portal, even when intelligent routing is disabled.
         evidence_repository=DatabaseRoutingEvidenceRepository(session),
         routing_preference_resolver=DatabaseRoutingPreferenceResolver(session),
+        routing_control_resolver=DatabaseRoutingControlResolver(session, settings),
     )
 
 

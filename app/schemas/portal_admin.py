@@ -219,3 +219,87 @@ class ScoreActivationResponse(AdminSchema):
     action: Literal["activate", "rollback"]
     score_count: int = Field(ge=1)
     valid_until: datetime
+
+
+class RoutingPolicyResponse(AdminSchema):
+    version: str
+    status: Literal["draft", "active", "retired"]
+    classifier_version: str
+    score_version: str
+    minimum_sample_count: int = Field(ge=1)
+    cold_start_mode: str
+    activated_at: datetime | None
+
+
+class RoutingPolicyListResponse(AdminSchema):
+    data: list[RoutingPolicyResponse]
+
+
+class ChangeRoutingPolicyRequest(AdminSchema):
+    version: str = Field(min_length=1, max_length=64)
+    action: Literal["activate", "rollback"]
+    reason: str = Field(min_length=3, max_length=500)
+    confirmation: Literal["CHANGE_ROUTING_POLICY"]
+
+
+class RoutingPolicyActivationResponse(AdminSchema):
+    policy_version: str
+    previous_policy_version: str | None
+    action: Literal["activate", "rollback"]
+    activated_at: datetime
+
+
+class RoutingRolloutResponse(AdminSchema):
+    mode: Literal["baseline", "shadow", "live"]
+    canary_percent: int = Field(ge=0, le=100)
+    customer_allowlist: list[UUID]
+    required_policy_version: str | None
+    required_score_version: str | None
+    source: Literal["environment", "database"]
+    version: int | None
+
+
+class ChangeRoutingRolloutRequest(AdminSchema):
+    mode: Literal["baseline", "shadow", "live"]
+    canary_percent: int = Field(ge=0, le=100)
+    customer_allowlist: list[UUID] = Field(default_factory=list, max_length=1_000)
+    required_policy_version: str | None = Field(default=None, max_length=64)
+    required_score_version: str | None = Field(default=None, max_length=64)
+    reason: str = Field(min_length=3, max_length=500)
+    confirmation: Literal["CHANGE_ROUTING_ROLLOUT"]
+
+
+class EmergencyBaselineRequest(AdminSchema):
+    reason: str = Field(min_length=3, max_length=500)
+    confirmation: Literal["EMERGENCY_BASELINE"]
+
+
+class RoutingConcentrationResponse(AdminSchema):
+    provider: str
+    model: str
+    request_count: int = Field(ge=0)
+    share: float = Field(ge=0, le=1)
+
+
+class ClassifierDistributionResponse(AdminSchema):
+    task_category: str
+    difficulty: str
+    request_count: int = Field(ge=0)
+    share: float = Field(ge=0, le=1)
+
+
+class RoutingOperationalSummaryResponse(AdminSchema):
+    window_hours: int = Field(ge=1)
+    request_count: int = Field(ge=0)
+    concentration: list[RoutingConcentrationResponse]
+    classifier_distribution: list[ClassifierDistributionResponse]
+    current_cost_usd: Decimal = Field(ge=0)
+    previous_cost_usd: Decimal = Field(ge=0)
+    cost_drift_percent: float | None
+    active_policy_version: str | None
+    active_score_version: str | None
+    evidence_valid_until: datetime | None
+    evidence_expired_count: int = Field(ge=0)
+    alert_state: Literal["healthy", "warning", "critical"]
+    alert_reasons: list[str]
+    grafana_url: str

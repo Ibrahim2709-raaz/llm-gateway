@@ -9,22 +9,25 @@ fallback throughout the rollout.
 Before enabling live intelligent routing:
 
 1. Confirm the evaluation run and capability score set were reviewed.
-2. Record the approved policy and score versions in the deployment change.
-3. Set both required-version environment variables to those exact values.
+2. Activate the approved policy and score versions through the operator portal.
+3. Pin those exact versions in the persistent routing control.
 4. Begin with an internal customer allowlist and a zero-percent canary.
 5. Verify the Grafana shadow panels and Prometheus alerts have recent data.
 6. Keep the previous deployment configuration ready for immediate restoration.
 
-Example starting configuration:
+Example starting control:
 
-```dotenv
-INTELLIGENT_ROUTING_ENABLED=true
-INTELLIGENT_ROUTING_SHADOW_ENABLED=false
-INTELLIGENT_ROUTING_CANARY_PERCENT=0
-INTELLIGENT_ROUTING_CUSTOMER_ALLOWLIST=<internal-client-uuid>
-INTELLIGENT_ROUTING_REQUIRED_POLICY_VERSION=policy-v2
-INTELLIGENT_ROUTING_REQUIRED_SCORE_VERSION=scores-v2
+```bash
+llm-gateway-routing-foundation rollout-set \
+  --mode live --canary-percent 0 \
+  --allow-client <internal-client-uuid> \
+  --policy-version policy-v2 --score-version scores-v2 \
+  --actor release-operator --reason "internal canary approved"
 ```
+
+Environment rollout settings remain a bootstrap fallback until the first
+persistent control is saved. After that, every gateway replica reads the same
+versioned database control on each request.
 
 Increase the percentage only after an observation window shows normal errors,
 latency, cost, routing concentration, and customer outcomes. Changing the
@@ -32,10 +35,12 @@ percentage keeps existing customers in a deterministic cohort.
 
 ## Emergency rollback to baseline-v1
 
-The fastest rollback does not modify database evidence:
+The fastest rollback does not modify database evidence and works without the
+portal:
 
-1. Set `INTELLIGENT_ROUTING_ENABLED=false` in the deployment configuration.
-2. Restart or roll out gateway replicas using that configuration.
+1. Run `llm-gateway-routing-foundation emergency-baseline --actor
+   <incident-commander> --reason "<incident reference>"`.
+2. Confirm the command reports baseline mode and a new control version.
 3. Confirm new responses report `routing_policy_version: baseline-v1`.
 4. Confirm `llm_gateway_intelligent_routes_total` stops increasing.
 5. Run the smoke test and verify readiness, provider errors, latency, and cost.
@@ -44,7 +49,7 @@ The fastest rollback does not modify database evidence:
 Do not activate another score set as an emergency response. The required
 version pins deliberately make an unexpected activation fail closed. If a
 reviewed earlier evidence set must be restored, use the audited policy and score
-rollback CLI commands, update both deployment pins, and repeat the preflight
+rollback workflows, update both persistent pins, and repeat the preflight
 checks before re-enabling live routing.
 
 ## Alert responses

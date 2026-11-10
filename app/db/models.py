@@ -37,6 +37,7 @@ from app.routing.taxonomy import (
     EVALUATION_CASE_OUTCOMES,
     EVALUATION_RUN_STATUSES,
     POLICY_ACTIVATION_ACTIONS,
+    ROUTING_ROLLOUT_MODES,
     TASK_CATEGORIES,
     TASK_DIFFICULTIES,
     VERSION_STATUSES,
@@ -619,6 +620,53 @@ class RoutingPolicyActivation(UUIDPrimaryKeyMixin, Base):
     reason: Mapped[str | None] = mapped_column(String(500))
     activated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+
+class RoutingRolloutConfiguration(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "routing_rollout_configurations"
+    __table_args__ = (
+        UniqueConstraint("name", name="uq_routing_rollout_configuration_name"),
+        CheckConstraint(
+            f"mode IN ({_sql_values(ROUTING_ROLLOUT_MODES)})",
+            name="routing_rollout_configuration_mode",
+        ),
+        CheckConstraint(
+            "canary_percent >= 0 AND canary_percent <= 100",
+            name="routing_rollout_configuration_canary_range",
+        ),
+        CheckConstraint("version > 0", name="routing_rollout_configuration_version"),
+    )
+
+    name: Mapped[str] = mapped_column(String(64), nullable=False, default="default")
+    mode: Mapped[str] = mapped_column(String(32), nullable=False, default="baseline")
+    canary_percent: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    customer_allowlist: Mapped[list[str]] = mapped_column(JSON, default=list, nullable=False)
+    required_policy_version: Mapped[str | None] = mapped_column(String(64))
+    required_score_version: Mapped[str | None] = mapped_column(String(64))
+    version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    updated_by_actor: Mapped[str] = mapped_column(String(200), nullable=False)
+
+
+class RoutingRolloutChange(UUIDPrimaryKeyMixin, Base):
+    __tablename__ = "routing_rollout_changes"
+
+    configuration_id: Mapped[UUID] = mapped_column(
+        ForeignKey("routing_rollout_configurations.id", ondelete="RESTRICT"),
+        nullable=False,
+        index=True,
+    )
+    action: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    actor: Mapped[str] = mapped_column(String(200), nullable=False)
+    reason: Mapped[str] = mapped_column(String(500), nullable=False)
+    previous_configuration: Mapped[dict[str, Any]] = mapped_column(
+        JSON, default=dict, nullable=False
+    )
+    new_configuration: Mapped[dict[str, Any]] = mapped_column(
+        JSON, default=dict, nullable=False
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False, index=True
     )
 
 

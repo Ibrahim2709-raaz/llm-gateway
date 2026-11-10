@@ -53,6 +53,12 @@ class PolicyActivationAction(StrEnum):
     ROLLBACK = "rollback"
 
 
+class RoutingRolloutMode(StrEnum):
+    BASELINE = "baseline"
+    SHADOW = "shadow"
+    LIVE = "live"
+
+
 TASK_CATEGORIES = tuple(category.value for category in TaskCategory)
 TASK_DIFFICULTIES = tuple(difficulty.value for difficulty in TaskDifficulty)
 MODEL_CAPABILITIES = tuple(capability.value for capability in ModelCapability)
@@ -61,3 +67,4 @@ EVALUATION_RUN_STATUSES = tuple(status.value for status in EvaluationRunStatus)
 EVALUATION_CASE_OUTCOMES = tuple(outcome.value for outcome in EvaluationCaseOutcome)
 COLD_START_MODES = tuple(mode.value for mode in ColdStartMode)
 POLICY_ACTIVATION_ACTIONS = tuple(action.value for action in PolicyActivationAction)
+ROUTING_ROLLOUT_MODES = tuple(mode.value for mode in RoutingRolloutMode)

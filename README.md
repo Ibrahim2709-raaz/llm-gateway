@@ -158,11 +158,14 @@ preferences and explanations, a governed request playground, and immutable
 audit history. Browser sessions, API keys, and one-time action links have
 separate lifecycles, and every customer resource is tenant-scoped.
 
-This is the completed Version 3 minimum viable product. Administrator routing
-controls, streaming, SDKs, bring-your-own-provider keys, commercial billing,
-and production-scale deployment are documented post-MVP increments rather than
-launch claims. See the [Version 3 roadmap](docs/version-3-roadmap.md) for that
-boundary.
+This is the completed Version 3 minimum viable product. The administrator
+control plane now adds reviewed pricing, guarded evaluations, score and policy
+activation, persistent shadow/canary controls, evidence pins, operational
+summaries, and an emergency baseline rollback available from both the portal
+and CLI. Streaming, SDKs, bring-your-own-provider keys, commercial billing,
+and production-scale deployment remain documented post-MVP increments rather
+than launch claims. See the [Version 3 roadmap](docs/version-3-roadmap.md) for
+that boundary.
 
 ## Project documentation
 
@@ -462,6 +465,22 @@ Run quality checks:
 ruff check .
 mypy app
 pytest --cov=app
+```
+
+Platform operators can inspect and change the effective intelligent-routing
+rollout without editing environment variables. Shadow and live modes require
+explicit policy and score pins. The emergency command is intentionally kept
+outside the web application so incident rollback remains available if the
+portal is unhealthy:
+
+```bash
+llm-gateway-routing-foundation rollout-show
+llm-gateway-routing-foundation rollout-set \
+  --mode live --canary-percent 5 \
+  --policy-version policy-v2 --score-version scores-v2 \
+  --actor release-operator --reason "validated canary"
+llm-gateway-routing-foundation emergency-baseline \
+  --actor incident-commander --reason "provider incident"
 ```
 
 The same checks run automatically in the repository's

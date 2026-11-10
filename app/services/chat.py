@@ -25,7 +25,12 @@ from app.routing.repository import (
     RoutingEvidenceError,
     RoutingEvidenceSnapshot,
 )
-from app.routing.rollout import IntelligentRoutingRollout
+from app.routing.rollout import (
+    IntelligentRoutingRollout,
+    RoutingControlResolver,
+    RoutingMode,
+    RoutingRuntimeConfiguration,
+)
 from app.routing.service import ProviderRouter, RoutingCandidate, RoutingPlan
 from app.schemas.chat import (
     ChatCompletionRequest,
@@ -66,6 +71,7 @@ class ChatCompletionService:
         intelligent_routing_required_score_version: str | None = None,
         evidence_repository: DatabaseRoutingEvidenceRepository | None = None,
         routing_preference_resolver: DatabaseRoutingPreferenceResolver | None = None,
+        routing_control_resolver: RoutingControlResolver | None = None,
         clock: Callable[[], float] = time.perf_counter,
     ) -> None:
         self.providers = providers
@@ -79,6 +85,7 @@ class ChatCompletionService:
         self.intelligent_routing_required_score_version = intelligent_routing_required_score_version
         self.evidence_repository = evidence_repository
         self.routing_preference_resolver = routing_preference_resolver
+        self.routing_control_resolver = routing_control_resolver
         if intelligent_routing_enabled and intelligent_routing_shadow_enabled:
             raise ValueError("Live and shadow intelligent routing cannot both be enabled")
         self.executor = ProviderExecutor(
@@ -102,7 +109,8 @@ class ChatCompletionService:
     ) -> ChatCompletionResponse:
         if self.routing_preference_resolver is not None:
             request = await self.routing_preference_resolver.apply(client_id, request)
-        live_routing_selected = self._live_routing_selected(client_id)
+        routing_control = await self._routing_control()
+        live_routing_selected = self._live_routing_selected(client_id, routing_control)
         if (
             self.response_cache is not None
             and not request.routing.disable_cache
@@ -130,7 +138,7 @@ class ChatCompletionService:
         elif request.routing.disable_cache or live_routing_selected:
             self._record_cache_request("bypass")
 
-        routing_plan = await self._plan(request, client_id)
+        routing_plan = await self._plan(request, client_id, control=routing_control)
         if self.evidence_repository is not None:
             await self.evidence_repository.record_decision(
                 request_id=request_id,
@@ -291,7 +299,10 @@ class ChatCompletionService:
 
         if self.routing_preference_resolver is not None:
             request = await self.routing_preference_resolver.apply(client_id, request)
-        plan = await self._plan(request, client_id, record_shadow=False)
+        routing_control = await self._routing_control()
+        plan = await self._plan(
+            request, client_id, record_shadow=False, control=routing_control
+        )
         return ChatPlanPreview(request=request, plan=plan)
 
     async def _plan(
@@ -300,13 +311,15 @@ class ChatCompletionService:
         client_id: UUID,
         *,
         record_shadow: bool = True,
+        control: RoutingRuntimeConfiguration | None = None,
     ) -> RoutingPlan:
-        if self.intelligent_routing_shadow_enabled:
+        control = control or await self._routing_control()
+        if control.mode == "shadow":
             baseline = self.router.plan(request)
             if record_shadow:
-                await self._record_shadow_decision(request, baseline)
+                await self._record_shadow_decision(request, baseline, control)
             return baseline
-        if not self._live_routing_selected(client_id):
+        if not self._live_routing_selected(client_id, control):
             return self.router.plan(request)
         if self.evidence_repository is None:
             raise RuntimeError("Intelligent routing requires an evidence repository")
@@ -321,12 +334,11 @@ class ChatCompletionService:
             ) from exc
         self._record_evidence_freshness(snapshot)
         if (
-            self.intelligent_routing_required_policy_version is not None
-            and snapshot.policy.version != self.intelligent_routing_required_policy_version
+            control.required_policy_version is not None
+            and snapshot.policy.version != control.required_policy_version
         ) or (
-            self.intelligent_routing_required_score_version is not None
-            and snapshot.policy.score_version
-            != self.intelligent_routing_required_score_version
+            control.required_score_version is not None
+            and snapshot.policy.score_version != control.required_score_version
         ):
             raise GatewayError(
                 "Active routing evidence does not match the versions pinned for this rollout.",
@@ -365,14 +377,38 @@ class ChatCompletionService:
             policy_version=evidence_plan.policy_version,
         )
 
-    def _live_routing_selected(self, client_id: UUID) -> bool:
+    async def _routing_control(self) -> RoutingRuntimeConfiguration:
+        if self.routing_control_resolver is not None:
+            return await self.routing_control_resolver.load()
+        mode: RoutingMode = (
+            "shadow"
+            if self.intelligent_routing_shadow_enabled
+            else "live" if self.intelligent_routing_enabled else "baseline"
+        )
+        return RoutingRuntimeConfiguration(
+            mode=mode,
+            rollout=self.intelligent_routing_rollout or IntelligentRoutingRollout(),
+            required_policy_version=self.intelligent_routing_required_policy_version,
+            required_score_version=self.intelligent_routing_required_score_version,
+        )
+
+    def _live_routing_selected(
+        self,
+        client_id: UUID,
+        control: RoutingRuntimeConfiguration | None = None,
+    ) -> bool:
+        if control is not None:
+            return control.live_selected(client_id)
         return self.intelligent_routing_enabled and (
             self.intelligent_routing_rollout is None
             or self.intelligent_routing_rollout.includes(client_id)
         )
 
     async def _record_shadow_decision(
-        self, request: ChatCompletionRequest, baseline: RoutingPlan
+        self,
+        request: ChatCompletionRequest,
+        baseline: RoutingPlan,
+        control: RoutingRuntimeConfiguration,
     ) -> None:
         if self.evidence_repository is None:
             logger.warning("intelligent_shadow_skipped", reason="evidence_repository_missing")
@@ -380,6 +416,17 @@ class ChatCompletionService:
         try:
             snapshot = await self.evidence_repository.load_active()
             self._record_evidence_freshness(snapshot)
+            if (
+                control.required_policy_version is not None
+                and snapshot.policy.version != control.required_policy_version
+            ) or (
+                control.required_score_version is not None
+                and snapshot.policy.score_version != control.required_score_version
+            ):
+                raise RoutingEvidenceError(
+                    "routing_evidence_version_mismatch",
+                    "Shadow evidence does not match rollout pins",
+                )
             classification = classify_request(request)
             shadow = EvidenceDrivenRouter(self.providers).plan(
                 request,

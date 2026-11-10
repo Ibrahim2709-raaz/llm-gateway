@@ -10,6 +10,8 @@ const state = {
   adminModels: [],
   adminEvaluationDatasets: [],
   adminEvaluationModels: [],
+  adminRoutingPolicies: [],
+  adminRoutingRollout: null,
 };
 
 const $ = (selector, root = document) => root.querySelector(selector);
@@ -104,9 +106,9 @@ function applyRoleVisibility() {
   const isOwner = state.organization?.role === "owner";
   const canDevelop = ["owner", "developer"].includes(state.organization?.role);
   const isPlatformOperator = state.account?.platform_role === "platform_operator";
-  $$(".owner-only").forEach((element) => element.classList.toggle("hidden", !isOwner));
-  $$(".developer-only").forEach((element) => element.classList.toggle("hidden", !canDevelop));
-  $$(".platform-only").forEach((element) => element.classList.toggle("hidden", !isPlatformOperator));
+  $$(".owner-only:not([data-page])").forEach((element) => element.classList.toggle("hidden", !isOwner));
+  $$(".developer-only:not([data-page])").forEach((element) => element.classList.toggle("hidden", !canDevelop));
+  $$(".platform-only:not([data-page])").forEach((element) => element.classList.toggle("hidden", !isPlatformOperator));
   $('[data-view="audit"]').classList.toggle("hidden", !isOwner);
   if (!isOwner && $('[data-page="audit"]:not(.hidden)')) showPage("overview");
   if (!isOwner && $('[data-page="service-accounts"]:not(.hidden)')) showPage("overview");
@@ -201,14 +203,19 @@ async function loadPage(name) {
 
 async function loadAdminEvaluations() {
   if (state.account?.platform_role !== "platform_operator") return;
-  const [runs, scores, datasets, catalog] = await Promise.all([
+  const [runs, scores, datasets, catalog, policies, rollout, summary] = await Promise.all([
     api("/v1/portal/admin/evaluations/runs?limit=100"),
     api("/v1/portal/admin/evaluations/scores"),
     api("/v1/portal/admin/evaluations/datasets"),
     api("/v1/portal/admin/models"),
+    api("/v1/portal/admin/routing/policies"),
+    api("/v1/portal/admin/routing/rollout"),
+    api("/v1/portal/admin/routing/summary?window_hours=24"),
   ]);
   state.adminEvaluationDatasets = datasets.data;
   state.adminEvaluationModels = catalog.data.filter((model) => model.availability === "available");
+  state.adminRoutingPolicies = policies.data;
+  state.adminRoutingRollout = rollout;
   $("#evaluation-run-count").textContent = formatNumber(runs.data.length);
   $("#evaluation-completed-count").textContent = formatNumber(runs.data.filter((run) => run.status === "completed").length);
   $("#evaluation-failure-count").textContent = formatNumber(runs.data.reduce((total, run) => total + run.failed_case_count, 0));
@@ -228,6 +235,81 @@ async function loadAdminEvaluations() {
     const controls = `<button class="text-button compare-score-version" data-provider="${escapeHtml(score.provider)}" data-model="${escapeHtml(score.model)}" data-version="${escapeHtml(score.score_version)}">Compare</button>${action ? ` <button class="text-button change-score-activation" data-provider="${escapeHtml(score.provider)}" data-model="${escapeHtml(score.model)}" data-version="${escapeHtml(score.score_version)}" data-action="${action}">${escapeHtml(titleCase(action))}</button>` : ""}`;
     return `<tr><td><strong>${escapeHtml(titleCase(score.provider))}</strong><br><code>${escapeHtml(score.model)}</code></td><td><code>${escapeHtml(score.score_version)}</code></td><td><span class="status-badge ${statusClass}">${escapeHtml(titleCase(score.status))}</span></td><td>${Math.round(Number(score.weighted_quality_score) * 100)} / 100</td><td>${formatNumber(score.sample_count)}</td><td>${formatNumber(score.score_count)}</td><td>${score.task_categories.map((item) => escapeHtml(titleCase(item))).join(", ")}</td><td>${score.valid_until ? formatDate(score.valid_until) : "Not active"}</td><td>${controls}</td></tr>`;
   }).join("") || '<tr><td colspan="9" class="empty-state">No score versions have been generated.</td></tr>';
+  const rolloutClass = rollout.mode === "live" ? "warning" : rollout.mode === "shadow" ? "success" : "neutral";
+  $("#routing-rollout-mode").textContent = `${titleCase(rollout.mode)} routing`;
+  $("#routing-rollout-source").textContent = `${titleCase(rollout.source)} · v${rollout.version ?? "—"}`;
+  $("#routing-rollout-source").className = `status-badge ${rolloutClass}`;
+  $("#routing-rollout-canary").textContent = `${formatNumber(rollout.canary_percent)}%`;
+  $("#routing-rollout-allowlist").textContent = formatNumber(rollout.customer_allowlist.length);
+  $("#routing-rollout-policy").textContent = rollout.required_policy_version || "Not pinned";
+  $("#routing-rollout-score").textContent = rollout.required_score_version || "Not pinned";
+  $("#routing-summary-requests").textContent = formatNumber(summary.request_count);
+  const leadingRoute = summary.concentration[0];
+  $("#routing-summary-concentration").textContent = leadingRoute ? `${leadingRoute.provider} / ${leadingRoute.model} · ${Math.round(leadingRoute.share * 100)}%` : "No routing data";
+  $("#routing-summary-cost").textContent = formatMoney(summary.current_cost_usd);
+  $("#routing-summary-drift").textContent = summary.cost_drift_percent === null ? "No prior-window comparison" : `${summary.cost_drift_percent >= 0 ? "+" : ""}${summary.cost_drift_percent.toFixed(1)}% vs prior 24h`;
+  $("#routing-summary-evidence").textContent = summary.evidence_valid_until ? formatDate(summary.evidence_valid_until) : "Not active";
+  $("#routing-summary-evidence-detail").textContent = summary.evidence_expired_count ? `${formatNumber(summary.evidence_expired_count)} expired score rows` : `${summary.active_policy_version || "No policy"} · ${summary.active_score_version || "No score set"}`;
+  $("#routing-summary-alert").textContent = titleCase(summary.alert_state);
+  $("#routing-summary-alert-detail").textContent = summary.alert_reasons.length ? summary.alert_reasons.map(titleCase).join(" · ") : "All routing safety checks pass";
+  $("#routing-grafana-link").href = summary.grafana_url;
+  $("#routing-concentration-list").innerHTML = summary.concentration.map((item) => `<div class="decision-item"><div><strong>${escapeHtml(titleCase(item.provider))} / ${escapeHtml(item.model)}</strong><p class="muted">${formatNumber(item.request_count)} requests</p></div><strong>${Math.round(item.share * 100)}%</strong></div>`).join("") || '<p class="empty-state">No routing decisions yet.</p>';
+  $("#routing-classifier-list").innerHTML = summary.classifier_distribution.map((item) => `<div class="decision-item"><div><strong>${escapeHtml(titleCase(item.task_category))}</strong><p class="muted">${escapeHtml(titleCase(item.difficulty))} · ${formatNumber(item.request_count)} requests</p></div><strong>${Math.round(item.share * 100)}%</strong></div>`).join("") || '<p class="empty-state">No classified requests yet.</p>';
+  $("#routing-policies-table").innerHTML = policies.data.map((policy) => {
+    const statusClass = policy.status === "active" ? "success" : policy.status === "draft" ? "warning" : "neutral";
+    const action = policy.status === "draft" ? "activate" : policy.status === "retired" ? "rollback" : "";
+    const control = action ? `<button class="text-button change-routing-policy" data-version="${escapeHtml(policy.version)}" data-action="${action}">${escapeHtml(titleCase(action))}</button>` : "";
+    return `<tr><td><code>${escapeHtml(policy.version)}</code></td><td><span class="status-badge ${statusClass}">${escapeHtml(titleCase(policy.status))}</span></td><td><code>${escapeHtml(policy.classifier_version)}</code></td><td><code>${escapeHtml(policy.score_version)}</code></td><td>${formatNumber(policy.minimum_sample_count)}</td><td>${escapeHtml(titleCase(policy.cold_start_mode))}</td><td>${policy.activated_at ? formatDate(policy.activated_at) : "—"}</td><td>${control}</td></tr>`;
+  }).join("") || '<tr><td colspan="8" class="empty-state">No routing policies exist.</td></tr>';
+}
+
+function openRoutingRolloutDialog() {
+  const rollout = state.adminRoutingRollout;
+  if (!rollout) return;
+  openDialog({ eyebrow: "CONTROLLED RELEASE", title: "Change routing rollout", content: `<form id="routing-rollout-form"><label>Mode<select name="mode"><option value="baseline">Baseline only</option><option value="shadow">Shadow observation</option><option value="live">Live canary</option></select></label><label>Live canary percentage<input name="canary_percent" type="number" min="0" max="100" value="${Number(rollout.canary_percent)}" required></label><label>Internal customer IDs<textarea name="customer_allowlist" rows="3" placeholder="One UUID per line">${escapeHtml(rollout.customer_allowlist.join("\n"))}</textarea></label><label>Policy version pin<input name="required_policy_version" maxlength="64" value="${escapeHtml(rollout.required_policy_version || "")}"></label><label>Score version pin<input name="required_score_version" maxlength="64" value="${escapeHtml(rollout.required_score_version || "")}"></label><label>Reason<textarea name="reason" rows="3" minlength="3" maxlength="500" required></textarea></label><label class="confirmation-check"><input name="confirmed" type="checkbox" required> I reviewed the evidence pins and rollout scope.</label><button class="button primary" type="submit">Apply rollout</button></form>` });
+  const form = $("#routing-rollout-form");
+  form.elements.mode.value = rollout.mode;
+  form.addEventListener("submit", async (event) => {
+    event.preventDefault(); setBusy(form, true);
+    try {
+      const values = new FormData(form);
+      const mode = values.get("mode");
+      const baseline = mode === "baseline";
+      const shadow = mode === "shadow";
+      const allowlist = baseline || shadow ? [] : String(values.get("customer_allowlist") || "").split(/[\s,]+/).filter(Boolean);
+      await api("/v1/portal/admin/routing/rollout", { method: "PUT", body: { mode, canary_percent: baseline || shadow ? 0 : Number(values.get("canary_percent")), customer_allowlist: allowlist, required_policy_version: baseline ? null : String(values.get("required_policy_version") || "").trim() || null, required_score_version: baseline ? null : String(values.get("required_score_version") || "").trim() || null, reason: values.get("reason"), confirmation: "CHANGE_ROUTING_ROLLOUT" } });
+      $("#form-dialog").close(); toast("Routing rollout updated and audited."); await loadAdminEvaluations();
+    } catch (error) { toast(error.message, true); }
+    finally { setBusy(form, false); }
+  });
+}
+
+function openEmergencyBaselineDialog() {
+  openDialog({ eyebrow: "INCIDENT CONTROL", title: "Return all traffic to baseline", content: '<form id="emergency-baseline-form"><p>This immediately disables shadow and live intelligent routing, clears the canary and allowlist, and removes evidence pins.</p><label>Incident reason<textarea name="reason" rows="4" minlength="3" maxlength="500" required></textarea></label><label class="confirmation-check"><input name="confirmed" type="checkbox" required> I understand this changes routing for every customer.</label><button class="button danger" type="submit">Enable emergency baseline</button></form>' });
+  const form = $("#emergency-baseline-form");
+  form.addEventListener("submit", async (event) => {
+    event.preventDefault(); setBusy(form, true);
+    try {
+      const reason = new FormData(form).get("reason");
+      await api("/v1/portal/admin/routing/rollout/emergency-baseline", { method: "POST", body: { reason, confirmation: "EMERGENCY_BASELINE" } });
+      $("#form-dialog").close(); toast("All traffic now uses baseline routing."); await loadAdminEvaluations();
+    } catch (error) { toast(error.message, true); }
+    finally { setBusy(form, false); }
+  });
+}
+
+function openRoutingPolicyDialog(version, action) {
+  openDialog({ eyebrow: "POLICY CHANGE", title: `${titleCase(action)} ${version}`, content: `<form id="routing-policy-form"><p>This changes the active rules used with pinned model evidence.</p><label>Reason<textarea name="reason" rows="4" minlength="3" maxlength="500" required></textarea></label><label class="confirmation-check"><input name="confirmed" type="checkbox" required> I reviewed the policy and understand the routing impact.</label><button class="button ${action === "rollback" ? "danger" : "primary"}" type="submit">${escapeHtml(titleCase(action))} policy</button></form>` });
+  const form = $("#routing-policy-form");
+  form.addEventListener("submit", async (event) => {
+    event.preventDefault(); setBusy(form, true);
+    try {
+      const reason = new FormData(form).get("reason");
+      await api("/v1/portal/admin/routing/policies/activation", { method: "POST", body: { version, action, reason, confirmation: "CHANGE_ROUTING_POLICY" } });
+      $("#form-dialog").close(); toast(`Routing policy ${action === "rollback" ? "rolled back" : "activated"}.`); await loadAdminEvaluations();
+    } catch (error) { toast(error.message, true); }
+    finally { setBusy(form, false); }
+  });
 }
 
 async function loadEvaluationFailures(runId, label) {
@@ -652,6 +734,8 @@ function bindEvents() {
   $("#new-service-account-button").addEventListener("click", openCreateServiceAccountDialog);
   $("#new-pricing-proposal-button").addEventListener("click", openPricingProposalDialog);
   $("#new-evaluation-button").addEventListener("click", openEvaluationDialog);
+  $("#edit-routing-rollout").addEventListener("click", openRoutingRolloutDialog);
+  $("#emergency-routing-baseline").addEventListener("click", openEmergencyBaselineDialog);
   $("#invite-button").addEventListener("click", openInviteDialog);
   $("#pricing-proposals-table").addEventListener("click", (event) => {
     const button = event.target.closest(".review-pricing");
@@ -670,6 +754,10 @@ function bindEvents() {
     if (compare) { openScoreComparisonDialog(compare.dataset.provider, compare.dataset.model, compare.dataset.version).catch((error) => toast(error.message, true)); return; }
     const activation = event.target.closest(".change-score-activation");
     if (activation) openScoreActivationDialog(activation.dataset.provider, activation.dataset.model, activation.dataset.version, activation.dataset.action);
+  });
+  $("#routing-policies-table").addEventListener("click", (event) => {
+    const button = event.target.closest(".change-routing-policy");
+    if (button) openRoutingPolicyDialog(button.dataset.version, button.dataset.action);
   });
   $("#keys-table").addEventListener("click", async (event) => {
     const rotateButton = event.target.closest(".rotate-key");

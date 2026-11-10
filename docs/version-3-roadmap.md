@@ -29,8 +29,8 @@ uses dependency-free HTML, CSS, and JavaScript served by FastAPI instead of a
 separate React deployment, reducing the launch attack surface and operational
 footprint. Server-sent streaming remains in Milestone 4 because cancellation
 and exact usage settlement require a gateway-wide protocol change; the MVP
-playground follows the current non-streaming API contract. Milestones 3 through
-7 remain post-MVP product increments.
+playground follows the current non-streaming API contract. Milestone 3 is
+complete. Milestones 4 through 7 remain post-MVP product increments.
 
 ## Product principles
 
@@ -96,10 +96,11 @@ semantic status colors.
 
 ## Milestone 3: Administrator routing control plane
 
-Status: in progress. The model catalog, independently reviewed pricing
-proposals, privacy-safe evaluation inspection, cost-capped run launch, draft
-score publication, comparison, activation, and rollback are implemented.
-Policy and rollout controls plus the consolidated operational summary remain.
+Status: complete. The model catalog, independently reviewed pricing proposals,
+privacy-safe evaluation inspection, cost-capped run launch, draft score
+publication and comparison, score and policy activation or rollback,
+persistent shadow/canary controls, evidence pins, emergency baseline rollback,
+and the consolidated operational summary are implemented.
 
 ### Work
 

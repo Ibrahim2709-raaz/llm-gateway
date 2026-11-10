@@ -49,6 +49,9 @@ class Settings(BaseSettings):
     organization_invitation_ttl_seconds: int = Field(default=604_800, ge=3_600, le=2_592_000)
     portal_action_token_delivery: Literal["response", "smtp", "disabled"] = "response"
     portal_public_base_url: AnyHttpUrl = AnyHttpUrl("http://localhost:8000")
+    grafana_public_url: AnyHttpUrl = AnyHttpUrl(
+        "http://localhost:3000/d/llm-gateway-overview/llm-gateway-overview"
+    )
     smtp_host: str | None = None
     smtp_port: int = Field(default=587, ge=1, le=65_535)
     smtp_security: Literal["starttls", "tls", "none"] = "starttls"

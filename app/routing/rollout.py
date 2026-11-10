@@ -1,6 +1,9 @@
 from dataclasses import dataclass
 from hashlib import sha256
+from typing import Literal, Protocol
 from uuid import UUID
+
+RoutingMode = Literal["baseline", "shadow", "live"]
 
 
 @dataclass(frozen=True, slots=True)
@@ -23,3 +26,20 @@ class IntelligentRoutingRollout:
             return True
         bucket = int.from_bytes(sha256(client_id.bytes).digest()[:8], "big") % 10_000
         return bucket < self.percentage * 100
+
+
+@dataclass(frozen=True, slots=True)
+class RoutingRuntimeConfiguration:
+    mode: RoutingMode
+    rollout: IntelligentRoutingRollout
+    required_policy_version: str | None = None
+    required_score_version: str | None = None
+    source: str = "environment"
+    version: int | None = None
+
+    def live_selected(self, client_id: UUID) -> bool:
+        return self.mode == "live" and self.rollout.includes(client_id)
+
+
+class RoutingControlResolver(Protocol):
+    async def load(self) -> RoutingRuntimeConfiguration: ...

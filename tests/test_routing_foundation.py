@@ -1,11 +1,20 @@
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock
 from uuid import uuid4
 
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.cli import routing_foundation as routing_cli
 from app.cli.routing_foundation import build_parser, format_inspection
-from app.db.models import EvaluationDataset, RoutingPolicyActivation, RoutingPolicyVersion
+from app.db.models import (
+    EvaluationDataset,
+    RoutingPolicyActivation,
+    RoutingPolicyVersion,
+    RoutingRolloutChange,
+    RoutingRolloutConfiguration,
+)
+from app.routing.control_plane import RoutingControlChangeResult
 from app.routing.foundation import (
     BASELINE_DATASET_NAME,
     BASELINE_DATASET_VERSION,
@@ -17,6 +26,29 @@ from app.routing.foundation import (
     inspect_routing_foundation,
     seed_routing_foundation,
 )
+from app.routing.rollout import IntelligentRoutingRollout, RoutingRuntimeConfiguration
+
+
+class AsyncSessionContext:
+    def __init__(self, session: Mock) -> None:
+        self.session = session
+
+    async def __aenter__(self) -> Mock:
+        return self.session
+
+    async def __aexit__(self, *_args: object) -> None:
+        return None
+
+
+class FakeSessionFactory:
+    def __init__(self) -> None:
+        self.session = Mock()
+
+    def begin(self) -> AsyncSessionContext:
+        return AsyncSessionContext(self.session)
+
+    def __call__(self) -> AsyncSessionContext:
+        return AsyncSessionContext(self.session)
 
 
 @pytest.mark.anyio
@@ -131,6 +163,34 @@ def test_routing_foundation_cli_parser_and_output() -> None:
     )
     assert activation_args.version == "candidate-v1"
     assert activation_args.actor == "release-bot"
+    emergency_args = build_parser().parse_args(
+        [
+            "emergency-baseline",
+            "--actor",
+            "incident-commander",
+            "--reason",
+            "provider incident",
+        ]
+    )
+    assert emergency_args.command == "emergency-baseline"
+    rollout_args = build_parser().parse_args(
+        [
+            "rollout-set",
+            "--mode",
+            "live",
+            "--canary-percent",
+            "5",
+            "--policy-version",
+            "policy-v2",
+            "--score-version",
+            "scores-v2",
+            "--actor",
+            "release-bot",
+            "--reason",
+            "start canary",
+        ]
+    )
+    assert rollout_args.canary_percent == 5
     inspection = FoundationInspection(
         datasets=(DatasetSummary("core-task-taxonomy", "1.0.0", "draft"),),
         policies=(
@@ -204,3 +264,77 @@ async def test_inspection_returns_activation_history_without_reason_or_secrets()
     assert inspection.activations == (
         ActivationSummary("candidate-v1", "baseline-v1", "activate", "release-bot"),
     )
+
+
+@pytest.mark.anyio
+async def test_cli_dispatches_rollout_show_update_and_emergency(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    engine = SimpleNamespace(dispose=AsyncMock())
+    factory = FakeSessionFactory()
+    runtime = RoutingRuntimeConfiguration(
+        mode="shadow",
+        rollout=IntelligentRoutingRollout(percentage=0),
+        required_policy_version="policy-v2",
+        required_score_version="scores-v2",
+        source="database",
+        version=2,
+    )
+    configuration = RoutingRolloutConfiguration(
+        id=uuid4(),
+        name="default",
+        mode="baseline",
+        canary_percent=0,
+        customer_allowlist=[],
+        required_policy_version=None,
+        required_score_version=None,
+        version=3,
+        updated_by_actor="incident-commander",
+    )
+    change = RoutingRolloutChange(
+        id=uuid4(),
+        configuration_id=configuration.id,
+        action="emergency_baseline",
+        actor="incident-commander",
+        reason="provider incident",
+        previous_configuration={},
+        new_configuration={},
+    )
+    result = RoutingControlChangeResult(configuration, change)
+    resolver = Mock(load=AsyncMock(return_value=runtime))
+    update = AsyncMock(return_value=result)
+    emergency = AsyncMock(return_value=result)
+    monkeypatch.setattr(
+        routing_cli, "get_settings", Mock(return_value=SimpleNamespace(database_url="db"))
+    )
+    monkeypatch.setattr(routing_cli, "create_async_engine", Mock(return_value=engine))
+    monkeypatch.setattr(routing_cli, "session_factory", Mock(return_value=factory))
+    monkeypatch.setattr(
+        routing_cli, "DatabaseRoutingControlResolver", Mock(return_value=resolver)
+    )
+    monkeypatch.setattr(routing_cli, "change_routing_control", update)
+    monkeypatch.setattr(routing_cli, "emergency_baseline", emergency)
+
+    shown = await routing_cli.run("rollout-show")
+    changed = await routing_cli.run(
+        "rollout-set",
+        mode="live",
+        canary_percent=5,
+        allow_clients=[str(uuid4())],
+        policy_version="policy-v2",
+        score_version="scores-v2",
+        actor="release-bot",
+        reason="start canary",
+    )
+    rolled_back = await routing_cli.run(
+        "emergency-baseline",
+        actor="incident-commander",
+        reason="provider incident",
+    )
+
+    assert "shadow" in shown
+    assert "baseline" in changed
+    assert "Emergency baseline enabled" in rolled_back
+    update.assert_awaited_once()
+    emergency.assert_awaited_once()
+    assert engine.dispose.await_count == 3

@@ -18,6 +18,13 @@ All notable changes to this project are documented in this file.
   preflights, explicit cost ceilings and execution confirmation, immutable
   draft-score publication, active-score comparisons, audited activation, and
   rollback.
+- A database-backed routing control plane for pinned shadow and live canary
+  releases, stable customer allowlists, attributable change history, policy
+  activation and rollback, and emergency baseline control from both portal and
+  CLI.
+- A consolidated operator summary for routing concentration, classifier mix,
+  period-over-period provider-cost drift, evidence freshness, safety alerts,
+  and direct Grafana diagnosis.
 - Version 3 customer-portal MVP completion: owner-managed service accounts with
   one-time workload credentials and cascading revocation, visible monthly
   budget-threshold alerts, and atomic gateway API-key rotation.

@@ -25,6 +25,11 @@ def test_portal_shell_and_assets_are_served_by_gateway() -> None:
     assert 'id="evaluation-runs-table"' in page.text
     assert 'id="score-versions-table"' in page.text
     assert 'id="new-evaluation-button"' in page.text
+    assert 'id="routing-rollout-mode"' in page.text
+    assert 'id="routing-policies-table"' in page.text
+    assert 'id="emergency-routing-baseline"' in page.text
+    assert 'id="routing-summary-alert"' in page.text
+    assert 'id="routing-grafana-link"' in page.text
     assert 'id="budget-alert"' in page.text
     assert page.headers["x-frame-options"] == "DENY"
     assert styles.status_code == 200
@@ -46,7 +51,12 @@ def test_portal_shell_and_assets_are_served_by_gateway() -> None:
     assert "/v1/portal/admin/evaluations/preflight" in script.text
     assert 'confirmation: "RUN_EVALUATION"' in script.text
     assert 'confirmation: "CHANGE_SCORE_SET"' in script.text
+    assert "/v1/portal/admin/routing/rollout" in script.text
+    assert "/v1/portal/admin/routing/summary" in script.text
+    assert 'confirmation: "EMERGENCY_BASELINE"' in script.text
+    assert 'confirmation: "CHANGE_ROUTING_POLICY"' in script.text
     assert 'platform_role === "platform_operator"' in script.text
+    assert '.platform-only:not([data-page])' in script.text
     assert "/rotate" in script.text
     assert 'name="prompt"' not in script.text
 

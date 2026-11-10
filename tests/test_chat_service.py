@@ -19,7 +19,7 @@ from app.routing.repository import (
     DatabaseRoutingEvidenceRepository,
     RoutingEvidenceSnapshot,
 )
-from app.routing.rollout import IntelligentRoutingRollout
+from app.routing.rollout import IntelligentRoutingRollout, RoutingRuntimeConfiguration
 from app.schemas.chat import ChatCompletionRequest, ChatMessage, RoutingOptions
 from app.services.chat import ChatCompletionService
 
@@ -272,6 +272,31 @@ async def test_intelligent_routing_canary_exclusion_uses_baseline_without_loadin
     assert result.gateway.routing_policy_version == "baseline-v1"
     repository.load_active.assert_not_awaited()
     metrics.record_intelligent_route.assert_not_called()
+
+
+@pytest.mark.anyio
+async def test_database_control_can_emergency_disable_static_live_routing() -> None:
+    provider = SuccessfulProvider()
+    repository = AsyncMock(spec=DatabaseRoutingEvidenceRepository)
+    control = AsyncMock()
+    control.load.return_value = RoutingRuntimeConfiguration(
+        mode="baseline",
+        rollout=IntelligentRoutingRollout(percentage=0),
+        source="database",
+        version=4,
+    )
+    service = ChatCompletionService(
+        (provider,),
+        intelligent_routing_enabled=True,
+        evidence_repository=repository,
+        routing_control_resolver=control,
+    )
+
+    result = await service.create(make_request(), uuid4(), uuid4())
+
+    assert result.gateway.routing_policy_version == "baseline-v1"
+    repository.load_active.assert_not_awaited()
+    control.load.assert_awaited_once()
 
 
 @pytest.mark.anyio

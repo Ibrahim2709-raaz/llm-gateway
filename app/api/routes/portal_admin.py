@@ -4,11 +4,12 @@ from typing import Annotated, cast
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query, Request, status
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import Settings, get_settings
 from app.core.errors import GatewayError
-from app.db.models import EvaluationRun, ProviderPricingProposal
+from app.db.models import EvaluationRun, ProviderPricingProposal, RoutingPolicyVersion
 from app.db.session import get_database_session
 from app.evaluations.operations import (
     create_candidate_scores,
@@ -45,11 +46,26 @@ from app.platform.pricing import (
     list_pricing_proposals,
     review_pricing_proposal,
 )
+from app.platform.routing_operations import build_routing_operational_summary
 from app.providers.base import ChatProvider
+from app.routing.control_plane import (
+    DatabaseRoutingControlResolver,
+    RoutingControlError,
+    change_routing_control,
+    emergency_baseline,
+    model_runtime,
+    serialize_runtime,
+)
+from app.routing.policy_activation import PolicyActivationError, change_active_policy
+from app.routing.rollout import RoutingRuntimeConfiguration
 from app.schemas.portal_admin import (
+    ChangeRoutingPolicyRequest,
+    ChangeRoutingRolloutRequest,
     ChangeScoreActivationRequest,
+    ClassifierDistributionResponse,
     CreateEvaluationRunRequest,
     CreatePricingProposalRequest,
+    EmergencyBaselineRequest,
     EvaluationDatasetListResponse,
     EvaluationDatasetResponse,
     EvaluationExecutionResponse,
@@ -67,6 +83,12 @@ from app.schemas.portal_admin import (
     PublishEvaluationScoresRequest,
     PublishEvaluationScoresResponse,
     ReviewPricingProposalRequest,
+    RoutingConcentrationResponse,
+    RoutingOperationalSummaryResponse,
+    RoutingPolicyActivationResponse,
+    RoutingPolicyListResponse,
+    RoutingPolicyResponse,
+    RoutingRolloutResponse,
     ScoreActivationResponse,
     ScoreComparisonResponse,
     ScoreComparisonRowResponse,
@@ -75,6 +97,11 @@ from app.schemas.portal_admin import (
 )
 
 router = APIRouter(prefix="/v1/portal/admin", tags=["Portal administration"])
+
+
+def _rollout_response(runtime: RoutingRuntimeConfiguration) -> RoutingRolloutResponse:
+    data = serialize_runtime(runtime)
+    return RoutingRolloutResponse(**data)
 
 
 def _require_platform_operator(identity: BrowserIdentity) -> None:
@@ -222,6 +249,234 @@ async def create_admin_pricing_proposal(
         await database.rollback()
         raise
     return _proposal_response(proposal)
+
+
+@router.get(
+    "/routing/policies",
+    response_model=RoutingPolicyListResponse,
+    operation_id="listAdminRoutingPolicies",
+)
+async def list_admin_routing_policies(
+    identity: Annotated[BrowserIdentity, Depends(authenticate_portal_session)],
+    database: Annotated[AsyncSession, Depends(get_database_session)],
+) -> RoutingPolicyListResponse:
+    _require_platform_operator(identity)
+    policies = (
+        (
+            await database.execute(
+                select(RoutingPolicyVersion).order_by(
+                    RoutingPolicyVersion.created_at.desc()
+                )
+            )
+        )
+        .scalars()
+        .all()
+    )
+    return RoutingPolicyListResponse(
+        data=[
+            RoutingPolicyResponse(
+                version=policy.version,
+                status=policy.status,
+                classifier_version=policy.classifier_version,
+                score_version=policy.score_version,
+                minimum_sample_count=policy.minimum_sample_count,
+                cold_start_mode=policy.cold_start_mode,
+                activated_at=policy.activated_at,
+            )
+            for policy in policies
+        ]
+    )
+
+
+@router.post(
+    "/routing/policies/activation",
+    response_model=RoutingPolicyActivationResponse,
+    operation_id="changeAdminRoutingPolicy",
+)
+async def change_admin_routing_policy(
+    payload: ChangeRoutingPolicyRequest,
+    identity: Annotated[BrowserIdentity, Depends(require_portal_csrf)],
+    database: Annotated[AsyncSession, Depends(get_database_session)],
+) -> RoutingPolicyActivationResponse:
+    _require_platform_operator(identity)
+    try:
+        result = await change_active_policy(
+            database,
+            version=payload.version,
+            action=payload.action,
+            actor=str(identity.authentication.user.id),
+            reason=payload.reason,
+        )
+        await append_audit_event(
+            database,
+            principal=identity.principal,
+            action=f"routing_policy.{payload.action}",
+            resource_type="routing_policy_version",
+            resource_id=result.policy_version,
+            event_data={
+                "policy_version": result.policy_version,
+                "previous_policy_version": result.previous_policy_version,
+                "reason": payload.reason,
+            },
+        )
+        await database.commit()
+    except PolicyActivationError as exc:
+        await database.rollback()
+        raise GatewayError(str(exc), code=exc.code, status_code=409) from exc
+    except Exception:
+        await database.rollback()
+        raise
+    return RoutingPolicyActivationResponse(
+        policy_version=result.policy_version,
+        previous_policy_version=result.previous_policy_version,
+        action=result.action,
+        activated_at=result.activated_at,
+    )
+
+
+@router.get(
+    "/routing/rollout",
+    response_model=RoutingRolloutResponse,
+    operation_id="getAdminRoutingRollout",
+)
+async def get_admin_routing_rollout(
+    identity: Annotated[BrowserIdentity, Depends(authenticate_portal_session)],
+    database: Annotated[AsyncSession, Depends(get_database_session)],
+    settings: Annotated[Settings, Depends(get_settings)],
+) -> RoutingRolloutResponse:
+    _require_platform_operator(identity)
+    runtime = await DatabaseRoutingControlResolver(database, settings).load()
+    return _rollout_response(runtime)
+
+
+@router.get(
+    "/routing/summary",
+    response_model=RoutingOperationalSummaryResponse,
+    operation_id="getAdminRoutingOperationalSummary",
+)
+async def get_admin_routing_operational_summary(
+    identity: Annotated[BrowserIdentity, Depends(authenticate_portal_session)],
+    database: Annotated[AsyncSession, Depends(get_database_session)],
+    settings: Annotated[Settings, Depends(get_settings)],
+    window_hours: Annotated[int, Query(ge=1, le=720)] = 24,
+) -> RoutingOperationalSummaryResponse:
+    _require_platform_operator(identity)
+    runtime = await DatabaseRoutingControlResolver(database, settings).load()
+    summary = await build_routing_operational_summary(
+        database, runtime=runtime, window_hours=window_hours
+    )
+    return RoutingOperationalSummaryResponse(
+        window_hours=summary.window_hours,
+        request_count=summary.request_count,
+        concentration=[
+            RoutingConcentrationResponse(**asdict(item)) for item in summary.concentration
+        ],
+        classifier_distribution=[
+            ClassifierDistributionResponse(**asdict(item))
+            for item in summary.classifier_distribution
+        ],
+        current_cost_usd=summary.current_cost_usd,
+        previous_cost_usd=summary.previous_cost_usd,
+        cost_drift_percent=summary.cost_drift_percent,
+        active_policy_version=summary.active_policy_version,
+        active_score_version=summary.active_score_version,
+        evidence_valid_until=summary.evidence_valid_until,
+        evidence_expired_count=summary.evidence_expired_count,
+        alert_state=summary.alert_state,
+        alert_reasons=list(summary.alert_reasons),
+        grafana_url=str(settings.grafana_public_url),
+    )
+
+
+@router.put(
+    "/routing/rollout",
+    response_model=RoutingRolloutResponse,
+    operation_id="changeAdminRoutingRollout",
+)
+async def change_admin_routing_rollout(
+    payload: ChangeRoutingRolloutRequest,
+    identity: Annotated[BrowserIdentity, Depends(require_portal_csrf)],
+    database: Annotated[AsyncSession, Depends(get_database_session)],
+    settings: Annotated[Settings, Depends(get_settings)],
+) -> RoutingRolloutResponse:
+    _require_platform_operator(identity)
+    resolver = DatabaseRoutingControlResolver(database, settings)
+    before = await resolver.load()
+    try:
+        result = await change_routing_control(
+            database,
+            mode=payload.mode,
+            canary_percent=payload.canary_percent,
+            customer_allowlist=frozenset(payload.customer_allowlist),
+            required_policy_version=payload.required_policy_version,
+            required_score_version=payload.required_score_version,
+            actor=str(identity.authentication.user.id),
+            reason=payload.reason,
+        )
+        after = model_runtime(result.configuration)
+        await append_audit_event(
+            database,
+            principal=identity.principal,
+            action="routing_rollout.updated",
+            resource_type="routing_rollout_configuration",
+            resource_id=str(result.configuration.id),
+            event_data={
+                "before": serialize_runtime(before),
+                "after": serialize_runtime(after),
+                "reason": payload.reason,
+            },
+        )
+        await database.commit()
+    except RoutingControlError as exc:
+        await database.rollback()
+        raise GatewayError(
+            str(exc), code="routing_rollout_invalid", status_code=409
+        ) from exc
+    except Exception:
+        await database.rollback()
+        raise
+    return _rollout_response(after)
+
+
+@router.post(
+    "/routing/rollout/emergency-baseline",
+    response_model=RoutingRolloutResponse,
+    operation_id="emergencyAdminRoutingBaseline",
+)
+async def emergency_admin_routing_baseline(
+    payload: EmergencyBaselineRequest,
+    identity: Annotated[BrowserIdentity, Depends(require_portal_csrf)],
+    database: Annotated[AsyncSession, Depends(get_database_session)],
+) -> RoutingRolloutResponse:
+    _require_platform_operator(identity)
+    try:
+        result = await emergency_baseline(
+            database,
+            actor=str(identity.authentication.user.id),
+            reason=payload.reason,
+        )
+        runtime = model_runtime(result.configuration)
+        await append_audit_event(
+            database,
+            principal=identity.principal,
+            action="routing_rollout.emergency_baseline",
+            resource_type="routing_rollout_configuration",
+            resource_id=str(result.configuration.id),
+            event_data={
+                "after": serialize_runtime(runtime),
+                "reason": payload.reason,
+            },
+        )
+        await database.commit()
+    except RoutingControlError as exc:
+        await database.rollback()
+        raise GatewayError(
+            str(exc), code="routing_rollout_invalid", status_code=409
+        ) from exc
+    except Exception:
+        await database.rollback()
+        raise
+    return _rollout_response(runtime)
 
 
 @router.get(

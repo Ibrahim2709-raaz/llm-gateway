@@ -19,6 +19,8 @@ from app.db.models import (
     RoutingDecisionSnapshot,
     RoutingPolicyActivation,
     RoutingPolicyVersion,
+    RoutingRolloutChange,
+    RoutingRolloutConfiguration,
     ScoreSetActivation,
     ServiceAccount,
     UsageRecord,
@@ -48,6 +50,8 @@ def test_initial_database_tables_are_registered() -> None:
         RoutingDecisionSnapshot.__tablename__,
         RoutingPolicyActivation.__tablename__,
         RoutingPolicyVersion.__tablename__,
+        RoutingRolloutChange.__tablename__,
+        RoutingRolloutConfiguration.__tablename__,
         ScoreSetActivation.__tablename__,
         ServiceAccount.__tablename__,
         UsageRecord.__tablename__,
@@ -148,6 +152,31 @@ def test_policy_activations_are_audited_without_secrets() -> None:
 
     assert {"policy_id", "previous_policy_id", "action", "actor", "reason"} <= columns
     assert "api_key" not in columns
+
+
+def test_rollout_controls_have_attributable_immutable_history() -> None:
+    configuration_columns = set(RoutingRolloutConfiguration.__table__.columns.keys())
+    change_columns = set(RoutingRolloutChange.__table__.columns.keys())
+
+    assert {
+        "mode",
+        "canary_percent",
+        "customer_allowlist",
+        "required_policy_version",
+        "required_score_version",
+        "version",
+        "updated_by_actor",
+    } <= configuration_columns
+    assert {
+        "configuration_id",
+        "action",
+        "actor",
+        "reason",
+        "previous_configuration",
+        "new_configuration",
+        "created_at",
+    } <= change_columns
+    assert "updated_at" not in change_columns
 
 
 def test_score_activations_are_audited_without_credentials() -> None:
